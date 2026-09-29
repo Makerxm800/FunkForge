@@ -1,0 +1,3 @@
+# FunkForge has NO external dependencies.
+# It uses only Python's standard library (tkinter, os, json, pathlib).
+# Nothing to install. Just run: python app.py
