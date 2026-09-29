@@ -78,7 +78,7 @@ Simple. Fast. Safe. 🔥
 --------------------------------------------------
 1. Clone the repo:
 
-   git clone https://github.com/yourname/funkforge.git
+   git clone https://github.com/Makerxm800/funkforge.git
 
 2. Make sure Python 3.10+ is installed.
    (tkinter is included with most Python installs.
