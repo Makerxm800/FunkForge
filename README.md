@@ -10,8 +10,8 @@ License: MIT
 ✨ WHAT IS FUNKFORGE?
 --------------------------------------------------
 FunkForge is a lightweight, standalone mod manager for
-Friday Night Funkin'. It lets you organize, enable, and
-disable mods without digging through game folders by hand.
+Friday Night Funkin'. It lets you enable or disable
+mods without digging through game folders by hand.
 
 Simple. Fast. Safe. 🔥
 
@@ -23,7 +23,7 @@ Simple. Fast. Safe. 🔥
 ✅ NO TELEMETRY    - We do NOT track you. Ever.
 ✅ NO ANALYTICS    - No Google Analytics, no tracking
                      pixels, no hidden callbacks.
-✅ NO ADS           - Zero ads, zero sponsors.
+✅ NO ADS          - Zero ads, zero sponsors.
 ✅ NO ACCOUNTS     - No sign-up, no login, no email.
 ✅ NO INTERNET     - Works 100% offline. The app never
                      phones home.
@@ -33,10 +33,9 @@ Simple. Fast. Safe. 🔥
 
 📁 WHAT USER DATA IS STORED?
    FunkForge saves ONE small config file locally on
-   YOUR computer only:
+   YOUR computer only (~/.funkforge.json):
      - Your mods folder path
-     - Which mods are enabled/disabled
-     - Your theme (light/dark)
+     - Your game executable path
 
    That's it. Nothing else. You can delete it anytime
    and the app will just ask you to set it up again.
@@ -47,37 +46,45 @@ Simple. Fast. Safe. 🔥
 
 🧪 HOW TO VERIFY
    Don't trust me? Good — don't trust anyone blindly.
-   1. Read the source code (it's all here in the repo).
+   1. Read the source code (it's all in app.py).
    2. Search the code for "http", "requests", "socket",
-      "urllib" — you'll find nothing suspicious.
-   3. Run it in a sandbox or VM if you want extra peace
-      of mind.
+      "urllib", "urlopen" — you'll find nothing.
+   3. The only imports are: os, json, shutil, subprocess,
+      tkinter, pathlib. All standard library.
+   4. Run it in a sandbox or VM for extra peace of mind.
 
 --------------------------------------------------
-🚀 FEATURES
+🚀 FEATURES (what's actually built)
 --------------------------------------------------
-- 🔍 Scan your mods folder automatically
+- 🔍 Scans your mods folder automatically
 - ✅ Enable / disable mods with one click
-- 🎯 Drag-and-drop mod priority ordering
-- 🧩 Detects missing dependencies
+- 💾 Saves your mods folder + game path locally
 - 🎮 Launch the game straight from the app
-- 🎨 Clean, simple interface
+- 🎨 Clean, simple interface (tkinter)
 - 📴 Fully offline
+
+--------------------------------------------------
+🗺️ ROADMAP (NOT built yet — future ideas)
+--------------------------------------------------
+[ ] Drag-and-drop mod priority ordering
+[ ] Mod dependency detection
+[ ] Profile system (save multiple loadouts)
+[ ] Mod conflict warnings
+[ ] Dark mode
+[ ] Auto-update checker (opt-in only)
 
 --------------------------------------------------
 📦 INSTALLATION
 --------------------------------------------------
-1. Download or clone this repository:
+1. Clone the repo:
 
    git clone https://github.com/yourname/funkforge.git
 
 2. Make sure Python 3.10+ is installed.
+   (tkinter is included with most Python installs.
+    On Linux you may need: sudo apt install python3-tk)
 
-3. Install dependencies:
-
-   pip install -r requirements.txt
-
-4. Run the app:
+3. No dependencies to install. Just run:
 
    python app.py
 
@@ -85,24 +92,23 @@ Simple. Fast. Safe. 🔥
 🕹️ USAGE
 --------------------------------------------------
 1. Open FunkForge.
-2. Point it to your FNF mods folder.
-3. Toggle mods on or off as you like.
-4. Hit "Launch" to start the game.
+2. Click "Browse" next to "Mods folder" and pick your
+   FNF mods directory.
+3. Click "Browse" next to "Game exe" and pick your
+   FNF executable.
+4. Check / uncheck mods to enable or disable them.
+   (Disabled mods get a .disabled suffix on the folder.)
+5. Click "Save" to remember your settings.
+6. Click "Launch Game" to start FNF.
 
 --------------------------------------------------
 ⚙️ REQUIREMENTS
 --------------------------------------------------
 - Python 3.10 or newer
+- tkinter (bundled with Python on Windows/macOS)
 - Windows / macOS / Linux
 - No internet connection required 🌐❌
-
---------------------------------------------------
-🗺️ ROADMAP
---------------------------------------------------
-[ ] Profile system (save mod loadouts)
-[ ] Auto-update checker (opt-in only, off by default)
-[ ] Mod conflict warnings
-[ ] Dark mode
+- No pip install needed — zero dependencies
 
 --------------------------------------------------
 🤝 CONTRIBUTING
