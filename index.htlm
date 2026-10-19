@@ -1,0 +1,2435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FunkForge — FNF Mod Browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0e0f14; --panel:#171922; --panel2:#1e212c; --border:#272b38;
+  --fg:#eceef4; --subtle:#8f94a8; --accent:#7c5cff; --accent-hover:#9479ff;
+  --accent-fg:#ffffff; --hover:#262a39; --select:#2c2560;
+  --danger:#e5484d; --success:#30a46c; --warn:#f5a524;
+  --shadow:0 12px 40px rgba(0,0,0,.45); --shadow-lg:0 24px 64px rgba(0,0,0,.6);
+  --radius:14px; --radius-sm:9px;
+  --card-size:280px;
+}
+[data-theme="light"] {
+  --bg:#f4f5fa; --panel:#ffffff; --panel2:#f1f3f9; --border:#dcdfeb;
+  --fg:#161824; --subtle:#6b7086; --accent:#6c4cf5; --accent-hover:#8266ff;
+  --hover:#e9ebf5; --select:#e5e0ff; --shadow:0 12px 40px rgba(90,60,200,.12);
+  --shadow-lg:0 24px 64px rgba(90,60,200,.18);
+}
+[data-theme="ocean"] {
+  --bg:#06283a; --panel:#0a3448; --panel2:#0e4258; --border:#174d63;
+  --fg:#e8f4f8; --subtle:#8fb3c1; --accent:#0ea5e9; --accent-hover:#38bdf8;
+  --hover:#134a5f; --select:#0c4a6e;
+}
+[data-theme="sunset"] {
+  --bg:#2b0e20; --panel:#3d1530; --panel2:#4e1c3d; --border:#5f2749;
+  --fg:#fdf0f5; --subtle:#c99ab0; --accent:#ec4899; --accent-hover:#f472b6;
+  --hover:#57204a; --select:#831843;
+}
+[data-theme="forest"] {
+  --bg:#071a13; --panel:#0b241b; --panel2:#103026; --border:#1a4032;
+  --fg:#eaf7f0; --subtle:#93b8a6; --accent:#10b981; --accent-hover:#34d399;
+  --hover:#143c2d; --select:#065f46;
+}
+[data-theme="rosegold"] {
+  --bg:#220f16; --panel:#301722; --panel2:#3e1e2e; --border:#4e2a3c;
+  --fg:#fdf0f3; --subtle:#c99aae; --accent:#f472b6; --accent-hover:#f9a8d4;
+  --hover:#482335; --select:#831843;
+}
+[data-theme="midnight"] {
+  --bg:#0e0f14; --panel:#171922; --panel2:#1e212c; --border:#272b38;
+  --fg:#eceef4; --subtle:#8f94a8; --accent:#7c5cff; --accent-hover:#9479ff;
+  --hover:#262a39; --select:#2c2560;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { height:100%; }
+body {
+  background:var(--bg); color:var(--fg);
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:14px; overflow:hidden;
+  transition:background .3s, color .3s;
+}
+body::before {
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:radial-gradient(600px 300px at 15% -5%, rgba(124,92,255,.14), transparent 70%),
+             radial-gradient(500px 280px at 90% 0%, rgba(177,140,255,.10), transparent 70%);
+}
+.app { position:relative; z-index:1; }
+.logo .logo-text {
+  font-family:"Unbounded",sans-serif; font-weight:800; letter-spacing:-.02em;
+  background:linear-gradient(135deg,#fff,#c9b8ff);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+}
+[data-theme="light"] .logo .logo-text { background:linear-gradient(135deg,#2b2350,#6c4cf5); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.beta-pill {
+  font-size:9px; font-weight:800; letter-spacing:.08em; color:#fff;
+  background:linear-gradient(135deg,#a855f7,#6366f1);
+  border-radius:999px; padding:2px 8px; margin-left:8px; vertical-align:middle;
+  box-shadow:0 2px 10px rgba(168,85,247,.45);
+}
+/* skeleton shimmer */
+.skel { position:relative; overflow:hidden; background:var(--panel2); }
+.skel::after {
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.09) 50%,transparent 80%);
+  animation:shimmer 1.3s infinite;
+}
+[data-theme="light"] .skel::after { background:linear-gradient(100deg,transparent 20%,rgba(108,76,245,.10) 50%,transparent 80%); }
+@keyframes shimmer { from { transform:translateX(-100%);} to { transform:translateX(100%);} }
+.card-img { transition:transform .35s cubic-bezier(.4,0,.2,1); }
+.card:hover .card-img { transform:scale(1.04); }
+.card { position:relative; }
+.card.conflict { border-color:var(--warn); }
+.badge-warn { background:var(--warn); color:#1a1a1a; }
+.badge-engine { background:rgba(124,92,255,.16); color:var(--accent-hover); border:1px solid rgba(124,92,255,.35); }
+/* hero */
+.hero {
+  margin:14px 18px 0; padding:18px 20px; border-radius:16px;
+  background:linear-gradient(135deg, rgba(124,92,255,.18), rgba(177,140,255,.08));
+  border:1px solid rgba(124,92,255,.30);
+  display:flex; align-items:center; gap:16px; flex-shrink:0;
+}
+.hero-title { font-family:"Unbounded",sans-serif; font-size:17px; font-weight:800; }
+.hero-sub { color:var(--subtle); font-size:12.5px; margin-top:4px; }
+.hero-actions { margin-left:auto; display:flex; gap:8px; }
+.profiles-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.profile-chip { padding:6px 12px; border-radius:999px; background:var(--panel2); border:1px solid var(--border); cursor:pointer; font:600 12px inherit; color:var(--fg); }
+.profile-chip.active { background:var(--accent); color:#fff; border-color:transparent; }
+.app-footer { padding:10px 18px; color:var(--subtle); font-size:11px; display:flex; gap:12px; border-top:1px solid var(--border); flex-shrink:0; }
+.app-footer button { background:none; border:none; color:var(--subtle); cursor:pointer; font:inherit; }
+.app-footer button:hover { color:var(--accent); }
+::-webkit-scrollbar { width:10px; height:10px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:5px; }
+::-webkit-scrollbar-thumb:hover { background:var(--subtle); }
+.app { display:flex; flex-direction:column; height:100vh; }
+
+header {
+  display:flex; align-items:center; gap:16px;
+  padding:12px 18px; background:var(--panel);
+  border-bottom:1px solid var(--border); flex-shrink:0;
+  position:relative; z-index:50;
+}
+.logo { display:flex; align-items:center; gap:10px; font-weight:800; font-size:16px; }
+.logo-icon {
+  width:32px; height:32px; border-radius:9px;
+  background:linear-gradient(135deg,var(--accent),#b18cff);
+  display:grid; place-items:center; color:#fff; font-size:18px; font-weight:800;
+  box-shadow:0 4px 14px rgba(124,92,255,.4);
+}
+.tabs { display:flex; gap:4px; margin-left:12px; }
+.tab {
+  padding:8px 16px; border-radius:var(--radius-sm);
+  background:transparent; color:var(--subtle);
+  border:none; cursor:pointer; font:600 13px inherit;
+  transition:all .2s cubic-bezier(.4,0,.2,1);
+  position:relative;
+}
+.tab:hover { color:var(--fg); background:var(--hover); }
+.tab.active { color:var(--fg); background:var(--panel2); }
+.tab.active::after {
+  content:''; position:absolute; bottom:-1px; left:8px; right:8px; height:2px;
+  background:var(--accent); border-radius:2px;
+  animation:tabIn .3s cubic-bezier(.4,0,.2,1);
+}
+@keyframes tabIn { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+.header-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+.btn {
+  padding:8px 18px; border-radius:999px;
+  background:var(--panel2); color:var(--fg);
+  border:1px solid var(--border); cursor:pointer;
+  font:600 13px inherit; transition:all .15s cubic-bezier(.4,0,.2,1);
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  position:relative; overflow:hidden;
+}
+.btn:hover { background:var(--hover); }
+.btn:active { transform:scale(.97); }
+.btn-accent { background:var(--accent); color:var(--accent-fg); box-shadow:0 4px 14px rgba(124,92,255,.3); }
+.btn-accent:hover { background:var(--accent-hover); box-shadow:0 6px 20px rgba(124,92,255,.4); }
+.btn-ghost { background:transparent; border:1px solid var(--border); }
+.btn-ghost:hover { background:var(--hover); }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-danger:hover { background:#f0565b; }
+.btn-sm { padding:5px 10px; font-size:12px; }
+.btn-icon { padding:8px; width:36px; justify-content:center; }
+
+.search-row {
+  display:flex; gap:12px; padding:14px 18px 0;
+  align-items:center; flex-shrink:0;
+}
+.search-wrap { flex:1; position:relative; max-width:720px; }
+.search-input {
+  width:100%; padding:12px 42px; border-radius:12px;
+  background:var(--panel2); color:var(--fg);
+  border:2px solid transparent; font:400 14px inherit;
+  outline:none; transition:border-color .2s, box-shadow .2s;
+}
+.search-input:focus { border-color:var(--accent); box-shadow:0 0 0 4px rgba(124,92,255,.15); }
+.search-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--subtle); }
+.search-clear {
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  background:transparent; border:none; color:var(--subtle);
+  cursor:pointer; font-size:18px; padding:4px 8px; border-radius:6px; display:none;
+}
+.search-clear:hover { background:var(--hover); color:var(--fg); }
+.suggestions {
+  position:absolute; top:calc(100% + 6px); left:0; right:0;
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:var(--radius); box-shadow:var(--shadow-lg);
+  z-index:100; max-height:380px; overflow-y:auto;
+  opacity:0; transform:translateY(-8px); pointer-events:none;
+  transition:opacity .2s, transform .2s;
+}
+.suggestions.show { opacity:1; transform:translateY(0); pointer-events:auto; display:block; }
+.suggestions-header {
+  padding:10px 16px 6px; color:var(--subtle);
+  font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+}
+.suggestion {
+  padding:10px 16px; cursor:pointer; display:flex; align-items:center; gap:10px;
+  transition:background .12s, padding-left .12s;
+}
+.suggestion:hover { background:var(--hover); padding-left:20px; }
+.suggestion .ico { color:var(--accent); }
+
+.filter-bar {
+  display:flex; gap:12px; padding:14px 18px 12px;
+  align-items:center; flex-wrap:wrap;
+  border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.pills { display:flex; gap:6px; flex-wrap:wrap; }
+.pill {
+  padding:6px 12px; border-radius:999px;
+  background:var(--panel2); color:var(--fg); border:none; cursor:pointer;
+  font:600 12px inherit;
+  transition:all .2s cubic-bezier(.4,0,.2,1);
+}
+.pill:hover { background:var(--hover); transform:translateY(-1px); }
+.pill.active {
+  background:var(--accent); color:var(--accent-fg);
+  box-shadow:0 4px 12px rgba(124,92,255,.35);
+  transform:translateY(-1px);
+}
+.spacer { flex:1; }
+.count { color:var(--subtle); font-size:12px; font-weight:600; }
+
+.custom-select { position:relative; user-select:none; }
+.custom-select-btn {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 14px; border-radius:var(--radius-sm);
+  background:var(--panel2); color:var(--fg);
+  border:1px solid transparent; cursor:pointer;
+  font:600 12px inherit;
+  transition:all .18s cubic-bezier(.4,0,.2,1);
+  min-width:170px;
+}
+.custom-select-btn:hover { background:var(--hover); }
+.custom-select.open .custom-select-btn {
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(124,92,255,.15);
+}
+.custom-select-label { flex:1; text-align:left; }
+.custom-select-arrow {
+  transition:transform .25s cubic-bezier(.4,0,.2,1);
+  font-size:10px; color:var(--subtle);
+}
+.custom-select.open .custom-select-arrow { transform:rotate(180deg); }
+.custom-select-menu {
+  position:absolute; top:calc(100% + 6px); left:0;
+  min-width:220px; padding:6px;
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:12px; box-shadow:var(--shadow-lg);
+  z-index:150;
+  opacity:0; transform:translateY(-8px) scale(.96); transform-origin:top left;
+  pointer-events:none;
+  transition:opacity .2s, transform .25s cubic-bezier(.4,0,.2,1);
+}
+.custom-select.open .custom-select-menu {
+  opacity:1; transform:translateY(0) scale(1); pointer-events:auto;
+}
+.custom-select-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px; border-radius:8px;
+  cursor:pointer; font-size:13px; font-weight:500;
+  color:var(--fg);
+  transition:background .12s, color .12s, padding-left .12s;
+}
+.custom-select-item:hover { background:var(--hover); padding-left:16px; }
+.custom-select-item.active {
+  background:var(--select); color:var(--accent);
+  font-weight:700;
+}
+.custom-select-item .check {
+  width:14px; color:var(--accent); font-weight:700;
+  transition:transform .2s;
+}
+.custom-select-item.active .check { transform:scale(1.15); }
+
+main { flex:1; overflow-y:auto; padding:16px 18px 40px; }
+#results {
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  gap:16px;
+  align-content:start;
+}
+@media (max-width:1200px) { #results { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+@media (max-width:900px) { #results { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media (max-width:560px) { #results { grid-template-columns:repeat(1, minmax(0, 1fr)); } }
+/* premium card detail */
+.card { border-radius:18px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.card-img-wrap { position:relative; overflow:hidden; aspect-ratio:16/9; background:var(--panel2); }
+.card-img { width:100%; height:100%; }
+.card-dl { font-size:11px; color:var(--subtle); }
+.card:hover .card-dl { color:var(--fg); }
+/* theme picker */
+.theme-pop {
+  position:absolute; top:calc(100% + 10px); right:0; z-index:200;
+  background:var(--panel); border:1px solid var(--border); border-radius:16px;
+  box-shadow:var(--shadow-lg); padding:12px; width:280px; display:none;
+}
+.theme-pop.show { display:block; animation:cardIn .25s cubic-bezier(.4,0,.2,1); }
+.theme-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.theme-swatch {
+  border-radius:12px; padding:10px 6px; cursor:pointer; text-align:center;
+  border:2px solid transparent; font-size:11px; font-weight:700;
+}
+.theme-swatch:hover { transform:translateY(-1px); }
+.theme-swatch.active { border-color:var(--accent); }
+/* file picker in modal */
+.file-list { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+.file-opt {
+  display:flex; gap:10px; align-items:center; padding:10px 12px;
+  border:1px solid var(--border); border-radius:12px; cursor:pointer; font-size:13px;
+}
+.file-opt:hover { background:var(--hover); }
+.file-opt.active { border-color:var(--accent); background:var(--select); }
+/* install folder bar */
+.folder-bar {
+  margin:0 18px; padding:10px 14px; border:1px dashed var(--border);
+  border-radius:12px; font-size:12px; color:var(--subtle);
+  display:flex; gap:10px; align-items:center; flex-shrink:0;
+}
+.folder-bar b { color:var(--fg); }
+/* view toggle */
+.view-toggle { display:flex; gap:2px; background:var(--panel2); border-radius:999px; padding:2px; }
+.view-toggle button { border:none; background:transparent; color:var(--subtle); padding:6px 12px; border-radius:999px; cursor:pointer; font:700 12px inherit; }
+.view-toggle button.active { background:var(--accent); color:#fff; }
+#results.list-mode { grid-template-columns:1fr; }
+#results.list-mode .card { flex-direction:row; }
+#results.list-mode .card-img-wrap { width:220px; flex-shrink:0; }
+.card {
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:var(--radius); overflow:hidden; cursor:pointer;
+  transition:transform .2s cubic-bezier(.4,0,.2,1),
+             border-color .2s,
+             box-shadow .2s;
+  display:flex; flex-direction:column;
+  min-width:0;
+  animation:cardIn .35s cubic-bezier(.4,0,.2,1) backwards;
+}
+@keyframes cardIn {
+  from { opacity:0; transform:translateY(12px) scale(.98); }
+  to { opacity:1; transform:translateY(0) scale(1); }
+}
+.card:hover {
+  transform:translateY(-4px);
+  border-color:var(--accent);
+  box-shadow:0 16px 40px rgba(124,92,255,.22);
+}
+.card-img { width:100%; aspect-ratio:16/9; background:var(--panel2); object-fit:cover; display:block; }
+.card-body { padding:12px 14px 14px; flex:1; display:flex; flex-direction:column; }
+.card-title {
+  font-weight:700; font-size:14px; line-height:1.3; margin-bottom:6px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.card-meta { color:var(--subtle); font-size:11px; display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+.card-badges { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.badge { padding:3px 8px; border-radius:999px; font-size:10px; font-weight:700; background:var(--panel2); color:var(--subtle); }
+.badge-installed { background:var(--success); color:#fff; }
+.badge-official { background:#f5a524; color:#1a1a1a; }
+.badge-type { background:var(--accent); color:#fff; }
+.state {
+  grid-column:1 / -1;
+  text-align:center; padding:60px 20px; color:var(--subtle);
+  display:flex; flex-direction:column; align-items:center;
+}
+.spinner {
+  width:44px; height:44px; margin:0 auto 16px;
+  border:4px solid var(--border); border-top-color:var(--accent);
+  border-radius:50%; animation:spin .8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.state-title { font-size:15px; font-weight:600; color:var(--fg); margin-bottom:6px; }
+.state-sub { font-size:13px; }
+.load-more { grid-column:1 / -1; padding:20px; text-align:center; }
+.load-more-btn {
+  padding:10px 24px; border-radius:var(--radius-sm);
+  background:var(--panel2); color:var(--fg);
+  border:1px solid var(--border); cursor:pointer; font:600 13px inherit;
+  transition:all .15s;
+}
+.load-more-btn:hover { background:var(--hover); transform:translateY(-1px); }
+
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.75);
+  backdrop-filter:blur(8px);
+  display:flex; align-items:center; justify-content:center;
+  z-index:200; padding:20px;
+  opacity:0; pointer-events:none;
+  transition:opacity .25s cubic-bezier(.4,0,.2,1);
+}
+.modal-overlay.show { opacity:1; pointer-events:auto; }
+.modal {
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:var(--radius); width:100%; max-width:880px;
+  max-height:92vh; overflow:hidden; display:flex; flex-direction:column;
+  box-shadow:var(--shadow-lg); position:relative;
+  transform:translateY(30px) scale(.96); opacity:0;
+  transition:transform .35s cubic-bezier(.16,1,.3,1),
+             opacity .3s;
+}
+.modal-overlay.show .modal { transform:translateY(0) scale(1); opacity:1; }
+.modal-close {
+  position:absolute; top:14px; right:14px; z-index:10;
+  width:36px; height:36px; border-radius:10px;
+  background:rgba(0,0,0,.55); color:#fff; border:none; cursor:pointer;
+  font-size:16px; display:grid; place-items:center;
+  backdrop-filter:blur(8px); transition:background .15s, transform .15s;
+  font-family:inherit;
+}
+.modal-close:hover { background:var(--danger); transform:scale(1.06); }
+.modal-preview {
+  position:relative; width:100%; aspect-ratio:16/9;
+  background:#000; overflow:hidden; user-select:none;
+}
+.preview-main { position:absolute; inset:0; }
+.preview-main img {
+  width:100%; height:100%; object-fit:contain; background:#000;
+  transition:opacity .3s ease; display:block;
+}
+.preview-placeholder {
+  position:absolute; inset:0; display:grid; place-items:center;
+  background:var(--panel2);
+}
+.preview-placeholder.hide { display:none; }
+.preview-counter {
+  position:absolute; top:14px; left:14px; z-index:5;
+  padding:5px 11px; border-radius:999px;
+  background:rgba(0,0,0,.6); color:#fff;
+  font-size:11px; font-weight:700; letter-spacing:.5px;
+  backdrop-filter:blur(8px); pointer-events:none;
+}
+.preview-nav {
+  position:absolute; top:50%; transform:translateY(-50%);
+  width:44px; height:44px; border-radius:50%;
+  background:rgba(0,0,0,.55); color:#fff; border:none;
+  cursor:pointer; font-size:24px; font-weight:300;
+  display:grid; place-items:center; z-index:5;
+  backdrop-filter:blur(8px);
+  opacity:0; transition:opacity .2s, background .15s, transform .15s;
+  line-height:1; padding-bottom:4px; font-family:Georgia,serif;
+}
+.preview-nav.prev { left:14px; }
+.preview-nav.next { right:14px; }
+.modal-preview:hover .preview-nav { opacity:1; }
+.preview-nav:hover { background:var(--accent); transform:translateY(-50%) scale(1.08); }
+.preview-nav:disabled { opacity:.3; cursor:default; }
+.modal-preview:hover .preview-nav:disabled { opacity:.3; }
+.preview-strip {
+  position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+  display:flex; gap:6px; padding:6px; border-radius:12px;
+  background:rgba(0,0,0,.65); backdrop-filter:blur(10px);
+  max-width:calc(100% - 24px); overflow-x:auto;
+  opacity:0; transition:opacity .2s, transform .2s;
+  scrollbar-width:thin;
+}
+.modal-preview:hover .preview-strip,
+.preview-strip:focus-within { opacity:1; }
+.preview-strip::-webkit-scrollbar { height:5px; }
+.preview-strip::-webkit-scrollbar-thumb { background:rgba(255,255,255,.3); border-radius:3px; }
+.strip-thumb {
+  width:64px; height:36px; border-radius:6px;
+  object-fit:cover; cursor:pointer;
+  border:2px solid transparent; flex-shrink:0;
+  transition:border-color .15s, transform .15s, filter .15s;
+  filter:brightness(.65);
+}
+.strip-thumb.active { border-color:var(--accent); filter:brightness(1); transform:scale(1.04); }
+.strip-thumb:hover { border-color:rgba(124,92,255,.7); filter:brightness(.95); }
+.modal-body { padding:22px 26px; overflow-y:auto; }
+.modal-title {
+  font-size:22px; font-weight:800; line-height:1.25; margin-bottom:10px;
+  padding-right:40px;
+}
+.modal-meta {
+  color:var(--subtle); font-size:13px; display:flex;
+  gap:16px; flex-wrap:wrap; margin-bottom:16px;
+  padding-bottom:14px; border-bottom:1px solid var(--border);
+  align-items:center;
+}
+.modal-meta span { display:inline-flex; align-items:center; gap:5px; }
+.modal-desc {
+  font-size:13.5px; line-height:1.65;
+  white-space:pre-wrap; word-wrap:break-word;
+  max-height:300px; overflow-y:auto; padding-right:8px;
+  color:var(--fg);
+}
+.modal-desc a {
+  color:var(--accent); text-decoration:none;
+  border-bottom:1px dashed rgba(124,92,255,.5);
+  transition:border-bottom-color .15s;
+  word-break:break-all;
+}
+.modal-desc a:hover { border-bottom-color:var(--accent); }
+.modal-actions {
+  display:flex; gap:8px; padding:16px 26px 20px;
+  border-top:1px solid var(--border); flex-wrap:wrap;
+  background:var(--panel);
+}
+.modal-actions .btn { flex:1; justify-content:center; padding:11px 16px; }
+
+.settings-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.65);
+  backdrop-filter:blur(8px); z-index:290;
+  opacity:0; pointer-events:none;
+  transition:opacity .3s cubic-bezier(.4,0,.2,1);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.settings-overlay.show { opacity:1; pointer-events:auto; }
+.settings-panel {
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:16px; width:100%; max-width:520px; max-height:88vh;
+  display:flex; flex-direction:column;
+  box-shadow:var(--shadow-lg);
+  transform:scale(.94) translateY(20px); opacity:0;
+  transition:transform .35s cubic-bezier(.16,1,.3,1),
+             opacity .3s;
+}
+.settings-overlay.show .settings-panel {
+  transform:scale(1) translateY(0); opacity:1;
+}
+.settings-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:20px 24px; border-bottom:1px solid var(--border);
+}
+.settings-title { font-size:18px; font-weight:800; }
+.settings-body { flex:1; overflow-y:auto; padding:8px 0; }
+.settings-section { padding:14px 24px; border-bottom:1px solid var(--border); }
+.settings-section:last-child { border-bottom:none; }
+.settings-section-title {
+  font-size:11px; font-weight:800; letter-spacing:1px;
+  color:var(--subtle); text-transform:uppercase; margin-bottom:12px;
+}
+.settings-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 0; gap:12px;
+}
+.settings-row .label { font-size:13px; font-weight:600; }
+.settings-row .sub { font-size:11px; color:var(--subtle); margin-top:2px; }
+.switch {
+  position:relative; width:44px; height:24px; flex-shrink:0;
+  background:var(--border); border-radius:999px; cursor:pointer;
+  transition:background .25s cubic-bezier(.4,0,.2,1);
+}
+.switch.on { background:var(--accent); }
+.switch::after {
+  content:''; position:absolute; top:2px; left:2px;
+  width:20px; height:20px; background:#fff; border-radius:50%;
+  transition:transform .25s cubic-bezier(.4,0,.2,1);
+  box-shadow:0 2px 4px rgba(0,0,0,.2);
+}
+.switch.on::after { transform:translateX(20px); }
+.settings-footer {
+  padding:16px 24px; border-top:1px solid var(--border);
+  font-size:11px; color:var(--subtle); text-align:center;
+  border-radius:0 0 16px 16px;
+}
+.settings-path {
+  font-family:ui-monospace,SFMono-Regular,monospace; font-size:11px;
+  background:var(--panel2); padding:8px 10px; border-radius:6px;
+  color:var(--fg); margin-top:6px; word-break:break-all;
+}
+.help-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+  align-items:center; justify-content:center; z-index:450; backdrop-filter:blur(6px); }
+.help-overlay.show { display:flex; }
+.help-card { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+  padding:22px; max-width:480px; width:calc(100% - 32px); box-shadow:var(--shadow-lg); }
+.help-card h3 { font-size:16px; margin-bottom:10px; }
+.help-card p, .help-card li { font-size:13px; line-height:1.6; color:var(--subtle); }
+.help-card p b, .help-card li b { color:var(--fg); }
+.help-card ol { margin:10px 0 4px 18px; }
+.dl-actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+.settings-input {
+  width:100%; margin-top:8px; padding:9px 11px; border-radius:8px;
+  background:var(--panel2); color:var(--fg); border:1px solid var(--border);
+  font:12px ui-monospace,SFMono-Regular,monospace; outline:none;
+}
+.settings-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,92,255,.18); }
+.dl-adv { margin-top:12px; }
+.dl-adv summary { cursor:pointer; font-size:12px; font-weight:600; color:var(--subtle); }
+.dl-adv .sub { font-size:11px; color:var(--subtle); margin-top:6px; line-height:1.5; }
+.pt-label { font-size:12px; font-weight:600; word-break:break-all; }
+.pbar { height:5px; border-radius:3px; background:rgba(255,255,255,.3); margin-top:8px; overflow:hidden; }
+.pbar i { display:block; height:100%; width:0; background:#fff; border-radius:3px; transition:width .15s; }
+.segmented {
+  display:flex; gap:2px; background:var(--panel2); border-radius:8px;
+  padding:2px; font-size:11px; font-weight:700;
+}
+.segmented button {
+  padding:5px 10px; border-radius:6px; border:none;
+  background:transparent; color:var(--subtle);
+  cursor:pointer; font:inherit;
+  transition:all .18s;
+}
+.segmented button:hover { color:var(--fg); }
+.segmented button.active {
+  background:var(--accent); color:#fff;
+  box-shadow:0 2px 8px rgba(124,92,255,.3);
+}
+
+.toast-wrap {
+  position:fixed; bottom:22px; right:22px;
+  display:flex; flex-direction:column; gap:10px;
+  z-index:500; pointer-events:none;
+}
+.toast {
+  background:var(--accent); color:#fff; padding:12px 18px; border-radius:12px;
+  font-weight:600; font-size:13px; box-shadow:var(--shadow);
+  min-width:260px; max-width:340px;
+  animation:toastIn .35s cubic-bezier(.16,1,.3,1);
+  pointer-events:auto; display:flex; align-items:center; gap:10px;
+}
+.toast.success { background:var(--success); }
+.toast.error { background:var(--danger); }
+.toast.warn { background:var(--warn); color:#1a1a1a; }
+@keyframes toastIn {
+  from { opacity:0; transform:translateX(60px) scale(.9); }
+  to { opacity:1; transform:translateX(0) scale(1); }
+}
+.toast.hide { animation:toastOut .3s cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes toastOut {
+  to { opacity:0; transform:translateX(60px) scale(.9); }
+}
+.status-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700;
+  background:var(--panel2); color:var(--subtle);
+  transition:all .3s;
+}
+.status-pill.ok { background:var(--success); color:#fff; }
+.status-pill.err { background:var(--danger); color:#fff; }
+
+@media (max-width:720px) {
+  header { flex-wrap:wrap; }
+  .search-row, .filter-bar { padding-left:12px; padding-right:12px; }
+  main { padding:12px; }
+  .modal-title { font-size:18px; }
+  .modal-body { padding:18px 20px; }
+  .modal-actions { padding:14px 20px 16px; }
+  #results { grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); }
+  .settings-panel { max-width:100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">♪</div>
+      <span class="logo-text">FunkForge</span><span class="beta-pill">BETA</span>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="browse">🔍 Browse</button>
+      <button class="tab" data-tab="installed">📁 Installed</button>
+      <button class="tab" data-tab="history">📜 History</button>
+    </div>
+    <div class="header-actions" style="position:relative">
+      <span class="status-pill" id="apiStatus">⏳ Connecting</span>
+      <div class="view-toggle" id="viewToggle" title="Grid / list view">
+        <button data-view="grid" class="active">▦ Grid</button>
+        <button data-view="list">☰ List</button>
+      </div>
+      <button class="btn btn-ghost btn-icon" id="themeBtn" title="Themes — pick your vibe">🎨</button>
+      <button class="btn btn-ghost btn-icon" id="settingsBtn" title="Settings">⚙</button>
+      <div class="theme-pop" id="themePop">
+        <div style="font-size:12px;font-weight:800;margin-bottom:10px">🎨 THEME</div>
+        <div class="theme-grid" id="themeGrid"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div>
+      <div class="hero-title">Find your next Friday Night Funkin' mod</div>
+      <div class="hero-sub" id="heroSub">Top community mods, live from GameBanana — filter by engine, save loadouts, spot conflicts.</div>
+    </div>
+    <div class="hero-actions">
+      <button class="btn btn-accent btn-sm" id="heroSurprise">🎲 Surprise me</button>
+      <button class="btn btn-ghost btn-sm" id="heroProfiles">📦 Loadouts</button>
+    </div>
+  </div>
+
+  <div class="search-row">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-input" id="searchInput"
+             placeholder="Search FNF mods on GameBanana…" autocomplete="off">
+      <button class="search-clear" id="clearSearch">✕</button>
+      <div class="suggestions" id="suggestions">
+        <div class="suggestions-header">Related suggestions</div>
+        <div id="suggestionsList"></div>
+      </div>
+    </div>
+    <button class="btn btn-accent" id="searchBtn">Search</button>
+    <button class="btn btn-ghost" id="showAllBtn">↻ Show All</button>
+  </div>
+
+  <div class="filter-bar" id="filterBar">
+    <div class="custom-select" id="sortSelect">
+      <button class="custom-select-btn" id="sortBtn">
+        <span>⇅</span>
+        <span class="custom-select-label" id="sortLabel">Most Downloaded</span>
+        <span class="custom-select-arrow">▼</span>
+      </button>
+      <div class="custom-select-menu" id="sortMenu">
+        <div class="custom-select-item" data-value="downloads"><span class="check">✓</span>Most Downloaded</div>
+        <div class="custom-select-item" data-value="likes"><span class="check"></span>Most Liked</div>
+        <div class="custom-select-item" data-value="views"><span class="check"></span>Most Viewed</div>
+        <div class="custom-select-item" data-value="new"><span class="check"></span>Newest</div>
+        <div class="custom-select-item" data-value="name"><span class="check"></span>A → Z</div>
+        <div class="custom-select-item" data-value="installed_only"><span class="check"></span>Installed Only</div>
+        <div class="custom-select-item" data-value="officials_only"><span class="check"></span>Officials Only</div>
+        <div class="custom-select-item" data-value="officials_first"><span class="check"></span>Officials First</div>
+      </div>
+    </div>
+    <div class="pills" id="enginePills"></div>
+    <div class="spacer"></div>
+    <span class="count" id="countLabel"></span>
+  </div>
+  <div class="filter-bar" id="profilesBar" style="display:none;border-bottom:1px solid var(--border)">
+    <span style="font-size:12px;color:var(--subtle);font-weight:700">📦 LOADOUTS:</span>
+    <div class="profiles-row" id="profilesRow"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" id="saveProfileBtn">＋ Save current</button>
+  </div>
+
+  <div class="folder-bar" id="folderBar">
+    <span>📁 <b id="installFolderName">No install folder set</b></span>
+    <span id="installFolderHint">— pick where installed mods live</span>
+    <span style="flex:1"></span>
+    <button class="btn btn-ghost btn-sm" id="setInstallFolder">📂 Set folder</button>
+    <button class="btn btn-ghost btn-sm" id="forgetInstallFolder" style="display:none">✕</button>
+  </div>
+
+  <main id="main">
+    <div id="results"></div>
+    <div id="sentinel" style="grid-column:1/-1;height:2px"></div>
+  </main>
+  <div class="app-footer">
+    <span>FunkForge Web · unofficial fan tool · not affiliated with the Funkin' Crew</span>
+    <span style="flex:1"></span>
+    <button id="footShortcuts">⌨ Shortcuts</button>
+    <button id="footTop">↑ Back to top</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+    <div class="modal-preview" id="modalPreview">
+      <div class="preview-main">
+        <img id="modalImg" alt="">
+        <div class="preview-placeholder" id="previewPlaceholder">
+          <div class="spinner"></div>
+        </div>
+      </div>
+      <div class="preview-counter" id="previewCounter">1 / 1</div>
+      <button class="preview-nav prev" id="previewPrev" aria-label="Previous">‹</button>
+      <button class="preview-nav next" id="previewNext" aria-label="Next">›</button>
+      <div class="preview-strip" id="previewStrip"></div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-title" id="modalTitle">Loading…</div>
+      <div class="modal-meta" id="modalMeta"></div>
+      <div id="filePickWrap" style="display:none">
+        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:var(--subtle);margin-top:6px">📦 FILES — PICK ONE</div>
+        <div class="file-list" id="fileList"></div>
+      </div>
+      <div class="modal-desc" id="modalDesc">Loading description…</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-accent" id="modalDownload">⬇ Download File</button>
+      <button class="btn btn-ghost" id="modalCopyLink" title="Copy direct file link">🔗</button>
+      <button class="btn btn-ghost" id="modalFolder" title="Choose where mods are saved"
+              style="flex:0 0 auto">📁 Folder</button>
+      <button class="btn btn-ghost" id="modalInstall">✅ Mark Installed</button>
+      <button class="btn btn-ghost" id="modalPage">📄 GameBanana</button>
+    </div>
+  </div>
+</div>
+
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <div class="settings-title">⚙ Settings</div>
+      <button class="btn btn-ghost btn-icon" id="settingsClose">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-section">
+        <div class="settings-section-title">Appearance — pick your vibe</div>
+        <div class="theme-grid" id="themeGridSettings" style="margin-bottom:12px"></div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Compact cards</div>
+            <div class="sub">Show more items per row</div>
+          </div>
+          <div class="switch" id="compactSwitch"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Quality filter</div>
+        <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div>
+            <div class="label">Minimum downloads</div>
+            <div class="sub">Hides low-effort / spam mods from Browse</div>
+          </div>
+          <div class="segmented" id="qualitySeg">
+            <button data-value="0">Any</button>
+            <button data-value="10">10+</button>
+            <button data-value="100" class="active">100+</button>
+            <button data-value="500">500+</button>
+            <button data-value="1000">1k+</button>
+            <button data-value="5000">5k+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Downloads</div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Auto-download on click</div>
+            <div class="sub">Start download immediately instead of opening the page</div>
+          </div>
+          <div class="switch" id="autoDlSwitch"></div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Ask where to save</div>
+            <div class="sub">Chrome / Edge only — pick a folder per download</div>
+          </div>
+          <div class="switch" id="askSaveSwitch"></div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Sub-folder per mod</div>
+            <div class="sub">Save each mod in its own folder inside your download folder</div>
+          </div>
+          <div class="switch" id="subfolderSwitch"></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="label" style="font-size:12px;margin-bottom:4px">📁 Download folder</div>
+          <div class="settings-path" id="downloadLocation">Browser default Downloads folder</div>
+          <div class="dl-actions">
+            <button class="btn btn-accent btn-sm" id="pickFolderBtn">📂 Choose folder</button>
+            <button class="btn btn-ghost btn-sm" id="clearFolderBtn" style="display:none">✕ Use browser default</button>
+          </div>
+        </div>
+        <details class="dl-adv">
+          <summary>Advanced: download proxy (optional)</summary>
+          <input class="settings-input" id="proxyInput" spellcheck="false"
+                 placeholder="https://your-proxy.example/?url={url}">
+          <div class="sub">Only needed if GameBanana blocks saving straight into your folder.
+            Leave empty to download directly. Use <b>{url}</b> where the file link goes.</div>
+        </details>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Data</div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Installed mods</div>
+            <div class="sub" id="installedCount">0 saved</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="clearInstalled">Clear</button>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="label">History</div>
+            <div class="sub" id="historyCount">0 entries</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="clearHistoryBtn">Clear</button>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Reset everything</div>
+            <div class="sub">Wipe installed, history & preferences</div>
+          </div>
+          <button class="btn btn-danger btn-sm" id="resetAll">Reset</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">About</div>
+        <div class="settings-row">
+          <div>
+            <div class="label">FunkForge Web</div>
+            <div class="sub">Version 3.0 · MIT License · Unofficial fan tool</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-footer">Preferences save automatically to this browser</div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="help-overlay" id="folderHelp">
+  <div class="help-card">
+    <h3>📁 Choose where downloads go</h3>
+    <p id="folderHelpWhy"></p>
+    <ol id="folderHelpSteps"></ol>
+    <div class="settings-path" id="folderHelpUrl" style="display:none"></div>
+    <div class="dl-actions">
+      <button class="btn btn-accent btn-sm" id="folderHelpCopy" style="display:none">📋 Copy settings link</button>
+      <button class="btn btn-ghost btn-sm" id="folderHelpClose">Close</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+
+const GB_API = "https://gamebanana.com/apiv11";
+const FNF_GAME_ID = 8694;
+const PER_PAGE = 48; // GB allows up to 50/page — bigger pages = fewer round-trips
+const SEARCH_PER_PAGE = 48;
+const STARTUP_PAGES = 6; // auto-fetch 6 pages on start/search — no "Load more" spam
+const PAGE_SIZE = 36; // cards painted per scroll chunk
+const THEMES_LIST = [
+  ["midnight", "🌙 Midnight", "#7c5cff"], ["light", "☀️ Light", "#6c4cf5"],
+  ["ocean", "🌊 Ocean", "#0ea5e9"], ["sunset", "🌅 Sunset", "#ec4899"],
+  ["forest", "🌲 Forest", "#10b981"], ["rosegold", "🌸 Rosegold", "#f472b6"],
+];
+
+const ENGINES = [
+  ["Psych Engine", ["psych"]],
+  ["Kade Engine", ["kade"]],
+  ["V-Slice / Vanilla", ["v-slice","vslice","vanilla","base game","official"]],
+  ["Codename Engine", ["codename"]],
+  ["Forever Engine", ["forever"]],
+  ["Andromeda Engine", ["andromeda"]],
+  ["Mic'd Up", ["mic'd up","micd up","micdup"]],
+  ["FPS Plus", ["fps plus"]],
+  ["Other / Unknown", []],
+];
+const ENGINE_NAMES = ENGINES.map(e => e[0]);
+const OFFICIAL_PREFIXES = ["friday night funkin","fnf base game","funkin' base game","base game","official release"];
+const OFFICIAL_SUBMITTERS = new Set(["ninjamuffin99","phantomarcade","phantomarcade3k","evilsk8r","kawaisprite","funkin' crew","funkin crew","the funkin' crew","funkincrew"]);
+const NOT_OFFICIAL_HINTS = [" vs","vs."," mod","remix","fan","reskin"," ft.","port","edition","recreation","clone","demake"];
+
+// API sort values — the exact strings GameBanana accepts
+const SORT_API = {
+  downloads: "Generic_MostDownloaded",
+  likes: "Generic_MostLiked",
+  views: "Generic_MostViewed",
+  new: "Generic_Newest",
+};
+
+function looksLikeJunk(name) {
+  if (!name) return true;
+  const n = name.toLowerCase().trim();
+  if (n.length < 4) return true;
+  if (!/[a-z]/i.test(n)) return true;
+  return false;
+}
+
+const cfg = JSON.parse(localStorage.getItem("ff.config") || "{}");
+const state = {
+  tab: "browse",
+  theme: cfg.theme || "midnight",
+  view: cfg.view || "grid",
+  visibleCount: PAGE_SIZE,
+  selectedFileId: null,
+  compact: cfg.compact || false,
+  autoDownload: cfg.autoDownload || false,
+  askSave: cfg.askSave || false,
+  subfolder: cfg.subfolder || false,
+  proxy: cfg.proxy || "",
+  minDownloads: cfg.minDownloads ?? 100,
+  engine: "All Engines",
+  sort: cfg.sort || "downloads",
+  query: "",
+  results: [],
+  page: 1,
+  hasMore: true,
+  loading: false,
+  installed: JSON.parse(localStorage.getItem("ff.installed") || "{}"),
+  history: JSON.parse(localStorage.getItem("ff.history") || "[]"),
+  selected: null,
+  previews: [],
+  previewIdx: 0,
+  previewTimer: null,
+  apiMode: "unknown",
+};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const decodeEntities = s => {
+  const t = document.createElement("textarea");
+  t.innerHTML = s;
+  return t.value;
+};
+const stripHtml = h => {
+  let s = String(h || "");
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, "");
+  s = decodeEntities(s);
+  s = s.replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+};
+const linkify = s => {
+  let out = esc(s);
+  out = out.replace(/\b(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  out = out.replace(/(^|[\s(])((?:discord\.gg|discord\.com\/invite|x\.com|twitter\.com|youtube\.com|youtu\.be)\/[^\s<,)]+)/g,
+    '$1<a href="https://$2" target="_blank" rel="noopener">$2</a>');
+  return out;
+};
+
+function saveConfig() {
+  localStorage.setItem("ff.config", JSON.stringify({
+    theme: state.theme, view: state.view, compact: state.compact,
+    autoDownload: state.autoDownload, askSave: state.askSave,
+    subfolder: state.subfolder, proxy: state.proxy,
+    minDownloads: state.minDownloads, sort: state.sort,
+  }));
+}
+function applyTheme(name) {
+  state.theme = name; saveConfig();
+  document.documentElement.dataset.theme = name === "midnight" ? "" : name;
+  document.body.dataset.theme = name === "midnight" ? "" : name;
+  document.querySelectorAll(".theme-swatch").forEach(s =>
+    s.classList.toggle("active", s.dataset.theme === name));
+}
+function renderThemePicker() {
+  const g = $("themeGrid"); if (!g) return;
+  g.innerHTML = "";
+  THEMES_LIST.forEach(([key, label, color]) => {
+    const d = document.createElement("div");
+    d.className = "theme-swatch" + (state.theme === key ? " active" : "");
+    d.dataset.theme = key;
+    d.innerHTML = `<div style="height:26px;border-radius:8px;background:${color};margin-bottom:6px"></div>${label}`;
+    d.addEventListener("click", () => { applyTheme(key); toast(`${label} theme`, "success"); });
+    g.appendChild(d);
+  });
+}
+function saveState() {
+  localStorage.setItem("ff.installed", JSON.stringify(state.installed));
+  localStorage.setItem("ff.history", JSON.stringify(state.history.slice(0, 500)));
+}
+
+(function setFavicon() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 64, 64);
+  grad.addColorStop(0, "#7c5cff");
+  grad.addColorStop(1, "#b18cff");
+  ctx.fillStyle = grad;
+  const r = 14;
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(64 - r, 0);
+  ctx.quadraticCurveTo(64, 0, 64, r);
+  ctx.lineTo(64, 64 - r);
+  ctx.quadraticCurveTo(64, 64, 64 - r, 64);
+  ctx.lineTo(r, 64);
+  ctx.quadraticCurveTo(0, 64, 0, 64 - r);
+  ctx.lineTo(0, r);
+  ctx.quadraticCurveTo(0, 0, r, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 42px -apple-system, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("♪", 32, 36);
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.href = c.toDataURL("image/png");
+  document.head.appendChild(link);
+})();
+
+/* ---------- API ---------- */
+function buildUrl(path, params = {}) {
+  const url = new URL(`${GB_API}/${path.replace(/^\//, "")}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return url.toString();
+}
+async function tryFetch(url, timeout = 15000) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    clearTimeout(to);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    clearTimeout(to);
+    throw e;
+  }
+}
+async function gbGet(path, params = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) qs.set(k, v);
+  const qsStr = qs.toString();
+
+  if (state.apiMode !== "direct" && location.protocol.startsWith("http")) {
+    try {
+      const data = await tryFetch(`/api/${path}?${qsStr}`, 20000);
+      if (state.apiMode !== "proxy") {
+        state.apiMode = "proxy";
+        updateApiStatus("ok", "🟢 Connected");
+      }
+      return data;
+    } catch (e) {
+      if (state.apiMode === "proxy") console.warn("Proxy failed:", e);
+    }
+  }
+
+  try {
+    const data = await tryFetch(buildUrl(path, params), 20000);
+    state.apiMode = "direct";
+    updateApiStatus("ok", "🟢 Connected");
+    return data;
+  } catch (e) { console.warn("Direct failed:", e); }
+
+  try {
+    const target = encodeURIComponent(buildUrl(path, params));
+    const data = await tryFetch(`https://corsproxy.io/?url=${target}`, 25000);
+    state.apiMode = "proxy";
+    updateApiStatus("ok", "🟢 Connected");
+    return data;
+  } catch (e) { console.warn("CORS proxy failed:", e); }
+
+  updateApiStatus("err", "🔴 Offline");
+  throw new Error("All API endpoints failed");
+}
+function updateApiStatus(cls, text) {
+  const el = $("apiStatus");
+  if (!el) return;
+  el.className = "status-pill " + (cls === "ok" ? "ok" : cls === "err" ? "err" : "");
+  el.textContent = text;
+}
+function parseRecords(data) {
+  if (!data) return [[], false];
+  if (Array.isArray(data)) return [data, data.length >= PER_PAGE];
+  const recs = data._aRecords || [];
+  const meta = data._aMetadata || {};
+  const more = "_bIsComplete" in meta ? !meta._bIsComplete : recs.length >= PER_PAGE;
+  return [recs, recs.length > 0 && more];
+}
+
+/**
+ * QUALITY FILTER — only in browse (search is looser)
+ */
+function passesQualityFilter(rec, opts = {}) {
+  const { requireDownloads = true, requirePreview = true, modsOnly = false } = opts;
+  const name = rec._sName || "";
+  if (looksLikeJunk(name)) return false;
+  if (modsOnly && (rec._sModelName || "Mod") !== "Mod") return false;
+  if (requireDownloads && state.minDownloads > 0) {
+    const dl = rec._nDownloadCount || 0;
+    if (dl < state.minDownloads) return false;
+  }
+  if (requirePreview) {
+    const imgs = rec._aPreviewMedia?._aImages || [];
+    if (!imgs.length) return false;
+  }
+  return true;
+}
+
+/**
+ * FETCH BROWSE — uses the correct GameBanana API sort values.
+ * "Generic_MostDownloaded" / "Generic_MostLiked" / etc.
+ * This returns The Full-Ass Tricky Mod, Vs Whitty, etc. as top results.
+ */
+async function fetchBrowse(page) {
+  const apiSort = SORT_API[state.sort] || "Generic_MostDownloaded";
+
+  try {
+    const data = await gbGet("Mod/Index", {
+      _nPerpage: PER_PAGE,
+      _nPage: page,
+      "_aFilters[Generic_Game]": FNF_GAME_ID,
+      _sSort: apiSort,
+    });
+    let [recs, more] = parseRecords(data);
+    // Only Mods — never Tools / Sounds / WIPs
+    recs = recs.filter(r => (r._sModelName || "Mod") === "Mod");
+    recs = recs.filter(r => passesQualityFilter(r, { modsOnly: true }));
+    if (recs.length) return [recs, more];
+  } catch (e) { console.warn("Mod/Index failed:", e); }
+
+  // Fallback: Subfeed (also uses proper sort)
+  const subSort = state.sort === "new" ? "new" : "default";
+  const data = await gbGet(`Game/${FNF_GAME_ID}/Subfeed`, {
+    _nPage: page, _nPerpage: PER_PAGE, _sSort: subSort,
+  });
+  let [recs, more] = parseRecords(data);
+  recs = recs.filter(r => (r._sModelName || "Mod") === "Mod");
+  recs = recs.filter(r => passesQualityFilter(r, { modsOnly: true }));
+  return [recs, more];
+}
+
+async function fetchSearch(query, page) {
+  const tries = ["Mod", "Tool", "Sound"];
+  const tasks = tries.map(m => gbGet("Util/Search/Results", {
+    _sModelName: m, _sSearchString: query,
+    _idGameRow: FNF_GAME_ID, _nPerpage: SEARCH_PER_PAGE, _nPage: page,
+  }).catch(() => null));
+  const all = await Promise.all(tasks);
+  const merged = [];
+  const seen = new Set();
+  let more = false;
+  all.forEach((data, i) => {
+    const [recs, m] = parseRecords(data);
+    if (m) more = true;
+    recs.forEach(r => {
+      r._sModelName = r._sModelName || tries[i];
+      const k = `${r._sModelName}:${r._idRow}`;
+      if (!seen.has(k)) { seen.add(k); merged.push(r); }
+    });
+  });
+  // In search we only require preview + name sanity, not popularity
+  let filtered = merged.filter(r => {
+    if (looksLikeJunk(r._sName)) return false;
+    const imgs = r._aPreviewMedia?._aImages || [];
+    if (!imgs.length) return false;
+    return true;
+  });
+  if (!filtered.length && page === 1) {
+    try {
+      const data = await gbGet("Util/Search/Results", {
+        _sSearchString: query, _nPerpage: SEARCH_PER_PAGE, _nPage: page,
+      });
+      const [recs] = parseRecords(data);
+      return [recs.filter(r => !looksLikeJunk(r._sName)), false];
+    } catch {}
+  }
+  return [filtered, more];
+}
+
+async function fetchSuggestions(query) {
+  try {
+    const data = await gbGet("Util/Search/Results", {
+      _sModelName: "Mod", _sSearchString: query,
+      _idGameRow: FNF_GAME_ID, _nPerpage: 10, _nPage: 1,
+    });
+    const [recs] = parseRecords(data);
+    const seen = new Set();
+    const names = [];
+    recs.forEach(r => {
+      const n = (r._sName || "").trim();
+      if (n && !looksLikeJunk(n) && !seen.has(n.toLowerCase())) {
+        seen.add(n.toLowerCase()); names.push(n);
+      }
+    });
+    return names.slice(0, 8);
+  } catch { return []; }
+}
+
+/* ---------- Helpers ---------- */
+function detectEngine(name) {
+  const t = (name || "").toLowerCase();
+  for (const [n, keys] of ENGINES) for (const k of keys) if (t.includes(k)) return n;
+  return "Other / Unknown";
+}
+function isOfficial(rec) {
+  const name = (rec._sName || "").toLowerCase();
+  const sub = ((rec._aSubmitter || {})._sName || "").toLowerCase();
+  if (state.installed[rec._idRow]?.official) return true;
+  if (sub && OFFICIAL_SUBMITTERS.has(sub)) return true;
+  if (!name) return false;
+  if (NOT_OFFICIAL_HINTS.some(h => name.includes(h))) return false;
+  return OFFICIAL_PREFIXES.some(p => name.startsWith(p));
+}
+function fmtNum(n) { return (n || 0).toLocaleString(); }
+function previewUrl(rec, idx = 0) {
+  const imgs = rec?._aPreviewMedia?._aImages || [];
+  const img = imgs[idx];
+  return img ? `${img._sBaseUrl}/${img._sFile}` : "";
+}
+function fmtDate(ts) {
+  if (!ts) return "?";
+  try { return new Date(ts * 1000).toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" }); }
+  catch { return "?"; }
+}
+function fmtAgo(ts) {
+  const d = Math.floor(Date.now() / 1000 - ts);
+  if (d < 60) return d + "s ago";
+  if (d < 3600) return Math.floor(d / 60) + "m ago";
+  if (d < 86400) return Math.floor(d / 3600) + "h ago";
+  return Math.floor(d / 86400) + "d ago";
+}
+function gbPageUrl(rec) {
+  const model = rec._sModelName || "Mod";
+  const slug = model.toLowerCase() + "s";
+  return `https://gamebanana.com/${slug}/${rec._idRow}`;
+}
+function addHistory(kind, name, detail = "") {
+  state.history.unshift({ ts: Math.floor(Date.now() / 1000), kind, name, detail });
+  state.history = state.history.slice(0, 500);
+  saveState();
+  updateSettingsCounts();
+  if (state.tab === "history") render();
+}
+function toast(msg, kind = "") {
+  const icons = { success: "✅ ", error: "⛔ ", warn: "⚠️ " };
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = (icons[kind] || "") + msg;
+  $("toastWrap").appendChild(el);
+  setTimeout(() => {
+    el.classList.add("hide");
+    setTimeout(() => el.remove(), 300);
+  }, 3200);
+}
+/* ---------- Profiles / loadouts (restored roadmap feature) ---------- */
+function loadProfiles() {
+  try { return JSON.parse(localStorage.getItem("ff.profiles") || "{}"); }
+  catch { return {}; }
+}
+function saveProfiles(p) { localStorage.setItem("ff.profiles", JSON.stringify(p)); }
+function normName(s) {
+  return String(s || "").toLowerCase().replace(/v?\d+(\.\d+)*/g, " ")
+    .replace(/[^a-z0-9]+/g, "");
+}
+function findConflicts() {
+  // Duplicate normalized names across installed mods = likely file-overwrite conflict
+  const seen = new Map(); const dups = new Set();
+  Object.values(state.installed).forEach(m => {
+    const n = normName(m._sName);
+    if (!n) return;
+    if (seen.has(n)) dups.add(n); else seen.set(n, m._sName);
+  });
+  return [...dups];
+}
+function renderProfiles() {
+  const bar = $("profilesBar"); const row = $("profilesRow");
+  if (!bar || !row) return;
+  const profiles = loadProfiles();
+  const names = Object.keys(profiles);
+  row.innerHTML = "";
+  names.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "profile-chip"; b.textContent = `${name} (${profiles[name].length})`;
+    b.title = "Click to restore this loadout";
+    b.addEventListener("click", () => {
+      if (!confirm(`Restore loadout "${name}"? Current installed list will be replaced.`)) return;
+      const ids = profiles[name];
+      const byId = {}; state.results.forEach(r => { byId[r._idRow] = r; });
+      const next = {};
+      ids.forEach(id => {
+        const src = byId[id] || state.installed[id];
+        if (src) next[id] = state.installed[id] || {
+          _idRow: src._idRow, _sName: src._sName, _sModelName: src._sModelName || "Mod",
+          _aSubmitter: src._aSubmitter, _aPreviewMedia: src._aPreviewMedia,
+          _nDownloadCount: src._nDownloadCount, installedAt: Math.floor(Date.now() / 1000),
+        };
+      });
+      state.installed = next; saveState(); render(); updateSettingsCounts();
+      addHistory("import", `Loadout "${name}"`, `${ids.length} mods restored`);
+      toast(`Loadout "${name}" restored`, "success");
+    });
+    // right-click to delete
+    b.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      if (!confirm(`Delete loadout "${name}"?`)) return;
+      const p = loadProfiles(); delete p[name]; saveProfiles(p); renderProfiles();
+    });
+    row.appendChild(b);
+  });
+  if (!names.length) {
+    row.innerHTML = '<span style="font-size:12px;color:var(--subtle)">No loadouts yet — install some mods, then “Save current”. Right-click a chip to delete.</span>';
+  }
+}
+
+/* ---------- Render ---------- */
+function renderEnginePills() {
+  const wrap = $("enginePills");
+  wrap.innerHTML = "";
+  ["All Engines", ...ENGINE_NAMES].forEach(name => {
+    const b = document.createElement("button");
+    b.className = "pill" + (state.engine === name ? " active" : "");
+    b.textContent = name.replace(" Engine", "").replace(" / Vanilla", "");
+    b.addEventListener("click", () => { state.engine = name; renderEnginePills(); render(); });
+    wrap.appendChild(b);
+  });
+}
+function applyFilters() {
+  let recs = state.results.slice();
+  if (state.engine !== "All Engines") recs = recs.filter(r => detectEngine(r._sName) === state.engine);
+  switch (state.sort) {
+    case "downloads": recs.sort((a, b) => (b._nDownloadCount || 0) - (a._nDownloadCount || 0)); break;
+    case "likes": recs.sort((a, b) => (b._nLikeCount || 0) - (a._nLikeCount || 0)); break;
+    case "views": recs.sort((a, b) => (b._nViewCount || 0) - (a._nViewCount || 0)); break;
+    case "new": recs.sort((a, b) => (b._tsDateAdded || 0) - (a._tsDateAdded || 0)); break;
+    case "name": recs.sort((a, b) => (a._sName || "").localeCompare(b._sName || "")); break;
+    case "installed_only": recs = recs.filter(r => state.installed[r._idRow]); break;
+    case "officials_only": recs = recs.filter(isOfficial); break;
+    case "officials_first": recs.sort((a, b) => (isOfficial(b) ? 1 : 0) - (isOfficial(a) ? 1 : 0)); break;
+  }
+  return recs;
+}
+function render() {
+  const main = $("results");
+  $("filterBar").style.display = state.tab === "browse" ? "flex" : "none";
+  $("countLabel").textContent = "";
+  if (state.tab === "installed") return renderInstalled(main);
+  if (state.tab === "history") return renderHistory(main);
+  renderBrowse(main);
+}
+function renderSkeletons(main, n = 8) {
+  main.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement("div");
+    d.className = "card";
+    d.innerHTML = `<div class="card-img skel" style="aspect-ratio:16/9"></div>
+      <div class="card-body"><div class="skel" style="height:14px;border-radius:6px"></div>
+      <div class="skel" style="height:10px;border-radius:6px;margin-top:8px;width:70%"></div></div>`;
+    main.appendChild(d);
+  }
+}
+function renderBrowse(main) {
+  if (state.loading && !state.results.length) {
+    renderSkeletons(main);
+    return;
+  }
+  const recs = applyFilters();
+  $("countLabel").textContent = `${recs.length} result${recs.length === 1 ? "" : "s"}`;
+  if (!recs.length) {
+    main.innerHTML = `<div class="state"><div class="state-title">No mods found</div>
+      <div class="state-sub">Try lowering the quality filter in ⚙ Settings, or search for something.</div></div>`;
+    return;
+  }
+  main.innerHTML = "";
+  main.classList.toggle("list-mode", state.view === "list");
+  const slice = recs.slice(0, state.visibleCount);
+  slice.forEach((r, i) => {
+    const card = buildCard(r);
+    if (i < 12) card.style.animationDelay = Math.min(i * 25, 300) + "ms";
+    main.appendChild(card);
+  });
+  if (state.visibleCount < recs.length) {
+    const more = document.createElement("div");
+    more.className = "load-more";
+    more.innerHTML = `<button class="load-more-btn">Show more (${recs.length - state.visibleCount} left)</button>`;
+    more.querySelector("button").addEventListener("click", () => { state.visibleCount += PAGE_SIZE; render(); });
+    main.appendChild(more);
+  } else if (state.hasMore) {
+    const more = document.createElement("div");
+    more.className = "load-more";
+    more.innerHTML = `<button class="load-more-btn">⬇ Load more from GameBanana</button>`;
+    more.querySelector("button").addEventListener("click", loadMore);
+    main.appendChild(more);
+  }
+}
+// Infinite scroll: auto-grow visible chunk + auto-fetch next page
+let sentinelObs = null;
+function initSentinel() {
+  const s = $("sentinel"); if (!s) return;
+  if (sentinelObs) sentinelObs.disconnect();
+  sentinelObs = new IntersectionObserver(entries => {
+    if (!entries[0].isIntersecting || state.tab !== "browse" || state.loading) return;
+    const recs = applyFilters();
+    if (state.visibleCount < recs.length) { state.visibleCount += PAGE_SIZE; render(); }
+    else if (state.hasMore) loadMore();
+  }, { root: $("main"), rootMargin: "600px" });
+  sentinelObs.observe(s);
+}
+function buildCard(r) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const img = previewUrl(r, 0);
+  const installed = state.installed[r._idRow];
+  const official = isOfficial(r);
+  const engine = detectEngine(r._sName);
+  const dupes = findConflicts();
+  const isDup = installed && dupes.includes(normName(r._sName));
+  if (isDup) card.classList.add("conflict");
+  const type = r._sModelName || "Mod";
+  const typeTag = type !== "Mod" ? `<span class="badge badge-type">${esc(type)}</span>` : "";
+  card.innerHTML = `
+    <div class="card-img-wrap">${img ? `<img class="card-img" loading="lazy" decoding="async" src="${esc(img)}" alt="" onerror="this.parentElement.style.display='none'">` : ``}</div>
+    <div class="card-body">
+      <div class="card-title">${esc(r._sName || "Unknown")}</div>
+      <div class="card-meta">
+        <span>👤 ${esc((r._aSubmitter || {})._sName || "Unknown")}</span>
+        <span class="card-dl">⬇ ${fmtNum(r._nDownloadCount)} · ❤ ${fmtNum(r._nLikeCount)}</span>
+      </div>
+      <div class="card-badges">
+        ${typeTag}
+        <span class="badge badge-engine">⚙ ${esc(engine.replace(" Engine","").replace(" / Vanilla",""))}</span>
+        ${installed ? `<span class="badge badge-installed">✅ Installed</span>` : ""}
+        ${official ? `<span class="badge badge-official">🌟 Official</span>` : ""}
+        ${isDup ? `<span class="badge badge-warn">⚠ Possible conflict</span>` : ""}
+      </div>
+    </div>`;
+  card.addEventListener("click", () => {
+    if (state.autoDownload) downloadFile(r);
+    else openModal(r);
+  });
+  return card;
+}
+function renderInstalled(main) {
+  const keys = Object.keys(state.installed);
+  if (!keys.length) {
+    main.innerHTML = `<div class="state"><div style="font-size:40px;margin-bottom:12px">📁</div><div class="state-title">No mods installed yet</div>
+      <div class="state-sub">Click a mod on the Browse tab and hit "Mark Installed". Save sets as loadouts with 📦 Loadouts.</div></div>`;
+    $("countLabel").textContent = "0 items";
+    return;
+  }
+  $("countLabel").textContent = `${keys.length} installed`;
+  main.innerHTML = "";
+  const dupes = findConflicts();
+  if (dupes.length) {
+    const warn = document.createElement("div");
+    warn.style.cssText = "grid-column:1/-1;padding:12px 16px;border-radius:12px;background:rgba(245,165,36,.12);border:1px solid rgba(245,165,36,.4);font-size:13px";
+    warn.innerHTML = `⚠️ <b>${dupes.length} possible conflict${dupes.length === 1 ? "" : "s"}</b> — mods with near-identical names may overwrite each other's files. Keep one enabled per set.`;
+    main.appendChild(warn);
+  }
+  keys.forEach((k, i) => {
+    const card = buildCard(state.installed[k]);
+    card.style.animationDelay = Math.min(i * 25, 500) + "ms";
+    main.appendChild(card);
+  });
+}
+function renderHistory(main) {
+  if (!state.history.length) {
+    main.innerHTML = `<div class="state"><div class="state-title">No history yet</div>
+      <div class="state-sub">Your activity will appear here.</div></div>`;
+    $("countLabel").textContent = "0 items";
+    return;
+  }
+  $("countLabel").textContent = `${state.history.length} entries`;
+  const icons = { install:"📥", download:"⬇", launch:"🎮", delete:"🗑",
+                  zip:"📦", import:"➕", folder:"📁", official:"🌟",
+                  theme:"🎨", engine:"⚙" };
+  main.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;grid-column:1/-1">` +
+    state.history.map(h => `
+      <div style="display:flex;gap:14px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);align-items:center">
+        <div style="font-size:22px">${icons[h.kind] || "•"}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px">${esc(h.name)}</div>
+          <div style="color:var(--subtle);font-size:12px;margin-top:3px">${esc(h.detail || h.kind)}</div>
+        </div>
+        <div style="color:var(--subtle);font-size:11px">${fmtAgo(h.ts)}</div>
+      </div>`).join("") + `</div>`;
+}
+
+/* ---------- Modal ---------- */
+async function openModal(r) {
+  state.selected = r;
+  state.previews = [];
+  state.previewIdx = 0;
+
+  $("modalTitle").textContent = r._sName || "Unknown";
+  const kind = r._sModelName || "Mod";
+  const typeTag = kind !== "Mod"
+    ? `<span class="badge badge-type" style="padding:2px 8px;font-size:10px">${esc(kind)}</span>`
+    : "";
+  const subName = (r._aSubmitter || {})._sName || "Unknown";
+  const engineGuess = detectEngine(r._sName);
+  const depHint = engineGuess === "Other / Unknown"
+    ? "Standalone or drag-and-drop — check the description for install steps"
+    : `Needs ${engineGuess} — install that engine build first`;
+  $("modalMeta").innerHTML = `
+    ${typeTag}
+    <span>👤 ${esc(subName)}</span>
+    <span>⬇ ${fmtNum(r._nDownloadCount)}</span>
+    <span>❤ ${fmtNum(r._nLikeCount)}</span>
+    <span>👁 ${fmtNum(r._nViewCount)}</span>
+    <span>📅 ${fmtDate(r._tsDateAdded)}</span>
+    <span title="${esc(depHint)}">⚙ ${esc(engineGuess)}</span>`;
+  $("modalDesc").textContent = "Loading description…";
+  $("previewPlaceholder").classList.remove("hide");
+  $("previewPlaceholder").innerHTML = '<div class="spinner"></div>';
+  $("previewCounter").textContent = "0 / 0";
+  $("previewStrip").innerHTML = "";
+  $("previewPrev").disabled = true;
+  $("previewNext").disabled = true;
+  $("modalImg").removeAttribute("src");
+  $("modalOverlay").classList.add("show");
+
+  const installed = state.installed[r._idRow];
+  const instBtn = $("modalInstall");
+  instBtn.textContent = installed ? "🗑 Uninstall" : "✅ Mark Installed";
+  instBtn.className = installed ? "btn btn-danger" : "btn btn-ghost";
+
+  const imgs = r._aPreviewMedia?._aImages || [];
+  state.previews = imgs.map(i => `${i._sBaseUrl}/${i._sFile}`);
+
+  if (state.previews.length) {
+    setPreviewImage(0);
+    renderPreviewStrip();
+    updatePreviewNav();
+    if (state.previews.length > 1) startPreviewCycle();
+  } else {
+    $("previewPlaceholder").innerHTML = '<div style="color:var(--subtle);font-size:13px">No preview images</div>';
+    $("previewCounter").textContent = "0 / 0";
+  }
+
+  // Files (picker) + description in parallel — modal opens instantly
+  state.selectedFileId = null;
+  $("filePickWrap").style.display = "none";
+  $("fileList").innerHTML = "";
+  getModFiles(r).then(files => {
+    if (state.selected !== r) return;
+    if (files.length) renderFilePicker(files);
+  }).catch(() => {});
+  try {
+    const model = r._sModelName || "Mod";
+    const data = await gbGet(`${model}/${r._idRow}/ProfilePage`);
+    if (state.selected !== r) return;
+    const raw = stripHtml(data._sText || "").slice(0, 3500) || "(no description)";
+    $("modalDesc").innerHTML = linkify(raw);
+  } catch (e) {
+    if (state.selected === r) $("modalDesc").textContent = "(failed to load description)";
+  }
+}
+function setPreviewImage(idx) {
+  if (!state.previews.length) return;
+  state.previewIdx = ((idx % state.previews.length) + state.previews.length) % state.previews.length;
+  const img = $("modalImg");
+  const url = state.previews[state.previewIdx];
+  const tmp = new Image();
+  tmp.onload = tmp.onerror = () => {
+    img.src = url;
+    $("previewPlaceholder").classList.add("hide");
+  };
+  tmp.src = url;
+  $("previewCounter").textContent = `${state.previewIdx + 1} / ${state.previews.length}`;
+  updateStripActive();
+  updatePreviewNav();
+}
+function updatePreviewNav() {
+  const n = state.previews.length;
+  $("previewPrev").disabled = n < 2;
+  $("previewNext").disabled = n < 2;
+}
+function updateStripActive() {
+  const strip = $("previewStrip");
+  [...strip.children].forEach((el, i) => {
+    el.classList.toggle("active", i === state.previewIdx);
+  });
+  const active = strip.children[state.previewIdx];
+  if (active) active.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+}
+function renderPreviewStrip() {
+  const strip = $("previewStrip");
+  strip.innerHTML = "";
+  state.previews.slice(0, 12).forEach((url, i) => {
+    const im = document.createElement("img");
+    im.className = "strip-thumb" + (i === state.previewIdx ? " active" : "");
+    im.src = url;
+    im.loading = "lazy";
+    im.addEventListener("click", e => { e.stopPropagation(); setPreviewImage(i); });
+    strip.appendChild(im);
+  });
+}
+function startPreviewCycle() {
+  stopPreviewCycle();
+  if (state.previews.length < 2) return;
+  state.previewTimer = setInterval(() => setPreviewImage(state.previewIdx + 1), 4000);
+}
+function stopPreviewCycle() {
+  if (state.previewTimer) { clearInterval(state.previewTimer); state.previewTimer = null; }
+}
+function closeModal() {
+  $("modalOverlay").classList.remove("show");
+  stopPreviewCycle();
+  state.selected = null;
+}
+
+/* ---------- Downloads ---------- */
+const DL = { dir: null, perm: "prompt" };
+const idb = {
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("funkforge", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  },
+  async get(k) {
+    try {
+      const db = await this.open();
+      return await new Promise(res => {
+        const q = db.transaction("kv").objectStore("kv").get(k);
+        q.onsuccess = () => res(q.result); q.onerror = () => res(undefined);
+      });
+    } catch { return undefined; }
+  },
+  async set(k, v) {
+    try {
+      const db = await this.open();
+      await new Promise((res, rej) => {
+        const tx = db.transaction("kv", "readwrite");
+        v === undefined ? tx.objectStore("kv").delete(k) : tx.objectStore("kv").put(v, k);
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      });
+    } catch {}
+  },
+};
+const canPickFolder = () => typeof window.showDirectoryPicker === "function";
+const safeName = s => String(s).replace(/[\\/:*?"<>|]+/g, "_").trim() || "mod";
+
+function updateDownloadLocationUI() {
+  const el = $("downloadLocation");
+  if (!el) return;
+  if (DL.dir) {
+    el.textContent = "📂 " + DL.dir.name + (DL.perm === "granted" ? "" : "   (you'll be asked to allow access on the next download)");
+  } else if (canPickFolder()) {
+    el.textContent = "Browser default Downloads folder — choose a folder to save mods straight into it";
+  } else {
+    el.textContent = "Browser default Downloads folder — this browser can't pick folders from a page (press Choose folder for help)";
+  }
+  $("clearFolderBtn").style.display = DL.dir ? "" : "none";
+  $("pickFolderBtn").textContent = DL.dir ? "📂 Change folder" : "📂 Choose folder";
+}
+async function pickDownloadFolder() {
+  if (!canPickFolder()) { openFolderHelp(); return false; }
+  try {
+    const dir = await window.showDirectoryPicker({ id: "funkforge-mods", mode: "readwrite", startIn: "downloads" });
+    DL.dir = dir; DL.perm = "granted";
+    await idb.set("dlDir", dir);
+    updateDownloadLocationUI();
+    toast("📂 Saving mods to “" + dir.name + "”", "success");
+    return true;
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Couldn't open the folder picker: " + e.message, "error");
+    return false;
+  }
+}
+async function ensureFolderAccess() {
+  if (!DL.dir) return false;
+  try {
+    let p = await DL.dir.queryPermission({ mode: "readwrite" });
+    if (p !== "granted") p = await DL.dir.requestPermission({ mode: "readwrite" });
+    DL.perm = p; updateDownloadLocationUI();
+    return p === "granted";
+  } catch { return false; }
+}
+function progressToast(label) {
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = '<div style="flex:1;min-width:0"><div class="pt-label"></div><div class="pbar"><i></i></div></div>';
+  const lab = el.querySelector(".pt-label"), bar = el.querySelector(".pbar i");
+  lab.textContent = label;
+  $("toastWrap").appendChild(el);
+  return {
+    update(done, total) {
+      bar.style.width = total ? Math.min(100, done / total * 100) + "%" : "40%";
+      lab.textContent = `${label} — ${humanSize(done)}${total ? " / " + humanSize(total) : ""}`;
+    },
+    finish(msg, kind) {
+      el.className = "toast " + (kind || ""); el.textContent = msg;
+      setTimeout(() => { el.classList.add("hide"); setTimeout(() => el.remove(), 300); }, 4200);
+    },
+  };
+}
+function viaProxy(url) {
+  const p = (state.proxy || "").trim();
+  if (!p) return null;
+  return p.includes("{url}") ? p.replace("{url}", encodeURIComponent(url)) : p + encodeURIComponent(url);
+}
+async function streamToDir(rootDir, url, name, subdir, onProgress) {
+  let dir = rootDir;
+  if (subdir) dir = await rootDir.getDirectoryHandle(safeName(subdir), { create: true });
+  const tries = [url]; const px = viaProxy(url); if (px) tries.push(px);
+  let lastErr;
+  for (const u of tries) {
+    try {
+      const resp = await fetch(u, { redirect: "follow" });
+      if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+      const total = +resp.headers.get("content-length") || 0;
+      const fh = await dir.getFileHandle(safeName(name), { create: true });
+      const w = await fh.createWritable();
+      const reader = resp.body.getReader(); let done = 0;
+      try {
+        for (;;) {
+          const { value, done: fin } = await reader.read();
+          if (fin) break;
+          await w.write(value); done += value.length; onProgress(done, total);
+        }
+        await w.close();
+      } catch (e) { try { await w.abort(); } catch {} throw e; }
+      return;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("blocked");
+}
+function browserDownload(url, name) {
+  // Anchor with download attr first (real "save file"), iframe as last resort.
+  try {
+    const a = document.createElement("a");
+    a.href = url; a.rel = "noopener";
+    if (name) a.download = name;
+    a.target = "_blank";
+    document.body.appendChild(a); a.click(); a.remove();
+    return;
+  } catch {}
+  const f = document.createElement("iframe");
+  f.style.display = "none"; f.src = url;
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 120000);
+}
+// Install folder = where "Mark Installed" entries point (File System Access, Chrome/Edge)
+const INSTALL = { dir: null };
+async function refreshInstallFolderUI() {
+  const n = $("installFolderName"), h = $("installFolderHint"), f = $("forgetInstallFolder");
+  if (INSTALL.dir) {
+    n.textContent = "“" + INSTALL.dir.name + "”";
+    h.textContent = "— installed mods reference this folder";
+    f.style.display = "";
+  } else {
+    n.textContent = "No install folder set";
+    h.textContent = "— pick where installed mods live";
+    f.style.display = "none";
+  }
+  if ($("setInstallFolder")) $("setInstallFolder").textContent = INSTALL.dir ? "📂 Change" : "📂 Set folder";
+}
+function saveBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+async function fetchToBlob(url, onProgress, maxBytes = 600 * 1024 * 1024) {
+  const tries = [url]; const px = viaProxy(url); if (px) tries.push(px);
+  let lastErr;
+  for (const u of tries) {
+    try {
+      const resp = await fetch(u, { redirect: "follow" });
+      if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+      const total = +resp.headers.get("content-length") || 0;
+      if (total > maxBytes) throw new Error("too big for in-page download");
+      const reader = resp.body.getReader(); const chunks = []; let done = 0;
+      for (;;) {
+        const { value, done: fin } = await reader.read();
+        if (fin) break;
+        chunks.push(value); done += value.length; onProgress(done, total);
+      }
+      return new Blob(chunks);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("blocked");
+}
+function toastAction(msg, label, href) {
+  const el = document.createElement("div");
+  el.className = "toast warn";
+  el.innerHTML = '<span style="flex:1"></span><a class="btn btn-sm" target="_blank" rel="noopener" style="background:rgba(0,0,0,.18);color:inherit;text-decoration:none"></a>';
+  el.firstChild.textContent = msg;
+  const a = el.lastChild; a.textContent = label; a.href = href;
+  $("toastWrap").appendChild(el);
+  setTimeout(() => { el.classList.add("hide"); setTimeout(() => el.remove(), 300); }, 10000);
+}
+async function openFolderHelp() {
+  const ua = navigator.userAgent;
+  const isBrave = !!(navigator.brave && await navigator.brave.isBrave().catch(() => false));
+  const isEdge = /Edg\//.test(ua), isOpera = /OPR\//.test(ua);
+  const isFirefox = /Firefox\//.test(ua);
+  const isSafari = /Safari\//.test(ua) && !/Chrome\//.test(ua) && !/Chromium\//.test(ua);
+  let why, steps = [], link = "";
+  if (window.self !== window.top) {
+    why = "This page is running inside a frame, and browsers block folder access there. <b>Open the site in its own tab</b> and try again.";
+  } else if (!window.isSecureContext) {
+    why = "This site is loaded over an <b>insecure address</b> (http://). Browsers only allow folder access on <b>https://</b> or <b>http://localhost</b>.";
+    steps = ["Open the site using its https:// address, or run it from localhost.", "Until then, downloads go to your browser's normal Downloads folder."];
+  } else if (isFirefox || isSafari) {
+    why = "Your browser can't pick a folder from a web page. <b>Chrome</b> or <b>Edge</b> can — or set your browser's own download folder:";
+    steps = isFirefox
+      ? ["Open <b>Settings → General → Files and Applications</b>.", "Under <b>Downloads</b>, choose <b>Save files to</b> (or tick <b>Always ask you where to save files</b>)."]
+      : ["Open <b>Safari → Settings → General</b>.", "Change <b>File download location</b>."];
+  } else {
+    why = isBrave
+      ? "Brave turns off folder access by default. Enable it, or set Brave's own download folder:"
+      : "This browser has folder access turned off. Use the latest <b>Chrome</b> / <b>Edge</b>, or set the browser's own download folder:";
+    link = isBrave ? "brave://settings/downloads" : isEdge ? "edge://settings/downloads" : isOpera ? "opera://settings/downloads" : "chrome://settings/downloads";
+    steps = ["Paste the settings link below into a new tab.", "Press <b>Change</b> next to <b>Location</b>, or switch on <b>Ask where to save each file</b>."];
+    if (isBrave) steps.push("To enable the in-page picker: open <b>brave://flags/#file-system-access-api</b>, set it to <b>Enabled</b>, and relaunch.");
+  }
+  $("folderHelpWhy").innerHTML = why;
+  $("folderHelpSteps").innerHTML = steps.map(s => "<li>" + s + "</li>").join("");
+  $("folderHelpUrl").style.display = link ? "" : "none";
+  $("folderHelpUrl").textContent = link;
+  $("folderHelpCopy").style.display = link ? "" : "none";
+  $("folderHelp").classList.add("show");
+}
+async function getModFiles(rec) {
+  // Cached file list for the modal picker + download. Biggest first.
+  const key = `${rec._sModelName || "Mod"}:${rec._idRow}`;
+  if (rec._ffFiles) return rec._ffFiles;
+  const model = rec._sModelName || "Mod";
+  const data = await gbGet(`${model}/${rec._idRow}/ProfilePage`);
+  const files = (data._aFiles || []).map(f => ({
+    id: f._idRow, name: f._sFile || (safeName(rec._sName) + ".zip"),
+    size: f._nFilesize || 0,
+    url: f._sDownloadUrl || `https://gamebanana.com/dl/${f._idRow}`,
+  })).sort((a, b) => b.size - a.size);
+  rec._ffFiles = files;
+  return files;
+}
+function renderFilePicker(files) {
+  const wrap = $("filePickWrap"), list = $("fileList");
+  if (!files.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  list.innerHTML = "";
+  if (!state.selectedFileId || !files.some(f => f.id === state.selectedFileId))
+    state.selectedFileId = files[0].id;
+  files.slice(0, 6).forEach(f => {
+    const d = document.createElement("div");
+    d.className = "file-opt" + (f.id === state.selectedFileId ? " active" : "");
+    d.innerHTML = `<span>${f.id === state.selectedFileId ? "✅" : "📦"}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</span>
+      <span style="color:var(--subtle);font-size:12px">${humanSize(f.size)}</span>`;
+    d.addEventListener("click", () => { state.selectedFileId = f.id; renderFilePicker(files); });
+    list.appendChild(d);
+  });
+  if (files.length > 6) {
+    const m = document.createElement("div");
+    m.style.cssText = "font-size:12px;color:var(--subtle)";
+    m.textContent = `+ ${files.length - 6} more file(s) — biggest shown first`;
+    list.appendChild(m);
+  }
+}
+async function downloadFile(rec, fileId) {
+  let dir = null;
+  try {
+    if (state.askSave && canPickFolder()) {
+      dir = await window.showDirectoryPicker({ id: "funkforge-mods", mode: "readwrite", startIn: "downloads" });
+    } else if (DL.dir && await ensureFolderAccess()) {
+      dir = DL.dir;
+    }
+  } catch (e) {
+    if (e.name === "AbortError") { toast("Download cancelled", "warn"); return; }
+  }
+  let files;
+  try {
+    toast("Fetching file list…");
+    files = await getModFiles(rec);
+    if (!files.length) throw new Error("no files");
+  } catch (e) {
+    console.error(e);
+    window.open(gbPageUrl(rec), "_blank", "noopener");
+    toast("Couldn't fetch the file list — opened the page instead", "warn");
+    return;
+  }
+  const file = files.find(f => f.id === (fileId || state.selectedFileId)) || files[0];
+  const { url, name, size } = file;
+  const pt = progressToast(`Downloading ${name}`);
+  try {
+    if (dir) {
+      await streamToDir(dir, url, name, state.subfolder ? rec._sName : null, pt.update);
+      pt.finish(`✅ Saved ${name} → ${dir.name}${state.subfolder ? "/" + safeName(rec._sName) : ""}`, "success");
+      addHistory("download", rec._sName, `📥 Saved ${name} → ${dir.name}`);
+    } else {
+      saveBlob(await fetchToBlob(url, pt.update), name);
+      pt.finish(`✅ Downloaded ${name} (${humanSize(size)})`, "success");
+      addHistory("download", rec._sName, `⬇ ${name}`);
+    }
+    return;
+  } catch (e) {
+    console.warn("In-page download blocked, using the browser download:", e);
+  }
+  pt.finish(`⬇ Starting browser download for ${name}…`, "warn");
+  browserDownload(url, name);
+  toastAction("Nothing downloading?", "Open link ↗", url);
+  addHistory("download", rec._sName, `⬇ ${name}`);
+}
+function humanSize(n) {
+  if (!n) return "?";
+  let x = n;
+  for (const u of ["B","KB","MB","GB"]) {
+    if (x < 1024) return x.toFixed(1) + " " + u;
+    x /= 1024;
+  }
+  return x.toFixed(1) + " TB";
+}
+
+/* ---------- Load / search ---------- */
+let _autoToken = 0;
+async function browseAll() {
+  state.query = "";
+  $("searchInput").value = "";
+  $("clearSearch").style.display = "none";
+  state.results = [];
+  state.page = 0;
+  state.hasMore = true;
+  state.visibleCount = PAGE_SIZE;
+  state.loading = true;
+  render();
+  const token = ++_autoToken;
+  // page 1 first (fast paint), then keep auto-fetching in the background
+  // until STARTUP_PAGES or exhausted — no "Load more" button mashing
+  try {
+    const [recs, more] = await fetchBrowse(1);
+    if (token !== _autoToken) return;
+    state.results = recs; state.page = 1; state.hasMore = more && recs.length > 0;
+    state.loading = false;
+    render();
+  } catch (e) {
+    console.error(e);
+    if (token === _autoToken) { toast("Failed to load mods", "error"); state.loading = false; render(); }
+    return;
+  }
+  for (let p = 2; p <= STARTUP_PAGES && state.hasMore; p++) {
+    if (token !== _autoToken) return;
+    state.loading = true; // block sentinel/loadMore while auto-fetching
+    try {
+      const [recs, more] = await fetchBrowse(p);
+      if (token !== _autoToken) return;
+      if (!recs.length) { state.hasMore = false; break; }
+      const ids = new Set(state.results.map(x => x._idRow));
+      recs.forEach(r => { if (!ids.has(r._idRow)) state.results.push(r); });
+      state.page = p; state.hasMore = more;
+      state.loading = false;
+      render(); // incremental paint — new cards appear as they land
+    } catch (e) { console.error(e); state.loading = false; break; }
+  }
+  state.loading = false;
+}
+async function loadMore() {
+  if (state.loading || !state.hasMore) return;
+  state.loading = true;
+  const token = _autoToken;
+  try {
+    const nextPage = state.page + 1;
+    let recs, more;
+    if (state.query) [recs, more] = await fetchSearch(state.query, nextPage);
+    else [recs, more] = await fetchBrowse(nextPage);
+    if (token !== _autoToken) return;
+    const ids = new Set(state.results.map(x => x._idRow));
+    recs.forEach(r => { if (!ids.has(r._idRow)) state.results.push(r); });
+    state.page = nextPage;
+    state.hasMore = more && recs.length > 0;
+  } catch (e) {
+    toast("Failed to load more", "error");
+    state.hasMore = false;
+  }
+  state.loading = false;
+  if (token === _autoToken) render();
+}
+async function doSearch() {
+  const q = $("searchInput").value.trim();
+  state.query = q;
+  $("suggestions").classList.remove("show");
+  if (!q) return browseAll();
+  state.results = [];
+  state.page = 0;
+  state.hasMore = true;
+  state.visibleCount = PAGE_SIZE;
+  state.loading = true;
+  render();
+  const token = ++_autoToken;
+  try {
+    const [recs, more] = await fetchSearch(q, 1);
+    if (token !== _autoToken) return;
+    state.results = recs; state.page = 1; state.hasMore = more && recs.length > 0;
+    state.loading = false;
+    render();
+  } catch (e) {
+    if (token === _autoToken) { toast("Search failed", "error"); state.loading = false; render(); }
+    return;
+  }
+  for (let p = 2; p <= STARTUP_PAGES && state.hasMore; p++) {
+    if (token !== _autoToken) return;
+    state.loading = true;
+    try {
+      const [recs, more] = await fetchSearch(q, p);
+      if (token !== _autoToken) return;
+      if (!recs.length) { state.hasMore = false; break; }
+      const ids = new Set(state.results.map(x => x._idRow));
+      recs.forEach(r => { if (!ids.has(r._idRow)) state.results.push(r); });
+      state.page = p; state.hasMore = more;
+      state.loading = false;
+      render();
+    } catch (e) { console.error(e); state.loading = false; break; }
+  }
+  state.loading = false;
+}
+
+/* ---------- Custom Sort Dropdown ---------- */
+const SORT_LABELS = {
+  downloads: "Most Downloaded", likes: "Most Liked", views: "Most Viewed",
+  new: "Newest", name: "A → Z",
+  installed_only: "Installed Only",
+  officials_only: "Officials Only",
+  officials_first: "Officials First",
+};
+function initSortDropdown() {
+  const dd = $("sortSelect");
+  const btn = $("sortBtn");
+  const menu = $("sortMenu");
+  const label = $("sortLabel");
+
+  const updateActive = () => {
+    label.textContent = SORT_LABELS[state.sort] || "Sort";
+    [...menu.children].forEach(el => {
+      const isActive = el.dataset.value === state.sort;
+      el.classList.toggle("active", isActive);
+      el.querySelector(".check").textContent = isActive ? "✓" : "";
+    });
+  };
+
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    dd.classList.toggle("open");
+  });
+  [...menu.children].forEach(el => {
+    el.addEventListener("click", () => {
+      const newSort = el.dataset.value;
+      const changedServerSort = SORT_API[newSort] !== undefined && SORT_API[newSort] !== SORT_API[state.sort];
+      state.sort = newSort;
+      saveConfig();
+      updateActive();
+      dd.classList.remove("open");
+      // If it's a server-side sort, refetch. Otherwise re-render.
+      if (changedServerSort && !state.query) {
+        browseAll();
+      } else {
+        render();
+      }
+    });
+  });
+  document.addEventListener("click", e => {
+    if (!dd.contains(e.target)) dd.classList.remove("open");
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") dd.classList.remove("open");
+  });
+  updateActive();
+}
+
+/* ---------- Settings ---------- */
+function updateSettingsCounts() {
+  $("installedCount").textContent = Object.keys(state.installed).length + " saved";
+  $("historyCount").textContent = state.history.length + " entries";
+}
+function openSettings() {
+  $("settingsOverlay").classList.add("show");
+  updateSettingsCounts();
+  syncQualitySeg();
+}
+function closeSettings() {
+  $("settingsOverlay").classList.remove("show");
+}
+function syncSwitches() {
+  $("compactSwitch").classList.toggle("on", state.compact);
+  $("autoDlSwitch").classList.toggle("on", state.autoDownload);
+  $("askSaveSwitch").classList.toggle("on", state.askSave);
+  $("subfolderSwitch").classList.toggle("on", state.subfolder);
+}
+function syncQualitySeg() {
+  [...$("qualitySeg").children].forEach(b => {
+    b.classList.toggle("active", parseInt(b.dataset.value, 10) === state.minDownloads);
+  });
+}
+function initQualitySeg() {
+  [...$("qualitySeg").children].forEach(b => {
+    b.addEventListener("click", () => {
+      state.minDownloads = parseInt(b.dataset.value, 10);
+      saveConfig();
+      syncQualitySeg();
+      toast(`Quality filter: ${b.textContent}`);
+      if (state.tab === "browse") browseAll();
+    });
+  });
+  syncQualitySeg();
+}
+
+/* ---------- Wire up ---------- */
+$("modalPreview").addEventListener("click", e => {
+  if (!state.previews.length) return;
+  if (e.target.closest(".strip-thumb") || e.target.closest(".preview-nav")) return;
+  setPreviewImage(state.previewIdx + 1);
+});
+$("previewPrev").addEventListener("click", e => { e.stopPropagation(); setPreviewImage(state.previewIdx - 1); });
+$("previewNext").addEventListener("click", e => { e.stopPropagation(); setPreviewImage(state.previewIdx + 1); });
+$("modalClose").addEventListener("click", closeModal);
+$("modalOverlay").addEventListener("click", e => { if (e.target === $("modalOverlay")) closeModal(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { closeModal(); closeSettings(); return; }
+  if (!$("modalOverlay").classList.contains("show")) return;
+  if (e.key === "ArrowLeft") setPreviewImage(state.previewIdx - 1);
+  if (e.key === "ArrowRight") setPreviewImage(state.previewIdx + 1);
+});
+
+$("modalDownload").addEventListener("click", () => {
+  if (!state.selected) return;
+  downloadFile(state.selected, state.selectedFileId);
+});
+$("modalInstall").addEventListener("click", () => {
+  const r = state.selected;
+  if (!r) return;
+  if (state.installed[r._idRow]) {
+    delete state.installed[r._idRow];
+    addHistory("delete", r._sName, "Removed from installed");
+    toast("Removed from installed", "warn");
+  } else {
+    state.installed[r._idRow] = {
+      _idRow: r._idRow, _sName: r._sName,
+      _sModelName: r._sModelName || "Mod",
+      _aSubmitter: r._aSubmitter, _aPreviewMedia: r._aPreviewMedia,
+      _nDownloadCount: r._nDownloadCount, _nLikeCount: r._nLikeCount,
+      _nViewCount: r._nViewCount,
+      _tsDateAdded: r._tsDateAdded,
+      official: isOfficial(r),
+      installFolder: INSTALL.dir ? INSTALL.dir.name : (DL.dir ? DL.dir.name : ""),
+      installedAt: Math.floor(Date.now() / 1000),
+    };
+    addHistory("install", r._sName, "Marked as installed");
+    toast("✅ Marked as installed", "success");
+  }
+  saveState();
+  openModal(r);
+  render();
+});
+$("modalPage").addEventListener("click", () => {
+  if (!state.selected) return;
+  window.open(gbPageUrl(state.selected), "_blank", "noopener");
+});
+
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    state.tab = t.dataset.tab;
+    render();
+  });
+});
+
+$("searchBtn").addEventListener("click", doSearch);
+$("showAllBtn").addEventListener("click", browseAll);
+$("heroSurprise").addEventListener("click", () => {
+  if (!state.results.length) { toast("Load mods first", "warn"); return; }
+  const pick = state.results[Math.floor(Math.random() * state.results.length)];
+  openModal(pick);
+  toast(`🎲 ${pick._sName}`, "success");
+});
+$("heroProfiles").addEventListener("click", () => {
+  const bar = $("profilesBar");
+  bar.style.display = bar.style.display === "none" ? "flex" : "none";
+  renderProfiles();
+});
+$("saveProfileBtn").addEventListener("click", () => {
+  const keys = Object.keys(state.installed);
+  if (!keys.length) { toast("Install something first", "warn"); return; }
+  const name = prompt("Name this loadout:", `Loadout ${Object.keys(loadProfiles()).length + 1}`);
+  if (!name) return;
+  const p = loadProfiles(); p[name.trim()] = keys; saveProfiles(p); renderProfiles();
+  addHistory("import", `Loadout "${name.trim()}"`, `${keys.length} mods saved`);
+  toast(`Loadout "${name.trim()}" saved`, "success");
+});
+$("footTop").addEventListener("click", () => $("main").scrollTo({ top: 0, behavior: "smooth" }));
+$("footShortcuts").addEventListener("click", () => toast("Shortcuts: / search · Esc close · ←/→ preview images"));
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement !== $("searchInput")) { e.preventDefault(); $("searchInput").focus(); }
+});
+
+let suggestTimer = null;
+let suggestReqId = 0;
+$("searchInput").addEventListener("input", () => {
+  const q = $("searchInput").value.trim();
+  $("clearSearch").style.display = q ? "block" : "none";
+  if (suggestTimer) clearTimeout(suggestTimer);
+  if (q.length < 2) { $("suggestions").classList.remove("show"); return; }
+  suggestTimer = setTimeout(async () => {
+    const rid = ++suggestReqId;
+    const names = await fetchSuggestions(q);
+    if (rid !== suggestReqId || !names.length) return;
+    $("suggestionsList").innerHTML = names.map(n =>
+      `<div class="suggestion" data-name="${esc(n)}"><span class="ico">🔍</span><span>${esc(n)}</span></div>`
+    ).join("");
+    $("suggestionsList").querySelectorAll(".suggestion").forEach(el => {
+      el.addEventListener("click", () => {
+        $("searchInput").value = el.dataset.name;
+        $("suggestions").classList.remove("show");
+        doSearch();
+      });
+    });
+    $("suggestions").classList.add("show");
+  }, 260);
+});
+$("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+$("searchInput").addEventListener("blur", () => {
+  setTimeout(() => $("suggestions").classList.remove("show"), 180);
+});
+$("clearSearch").addEventListener("click", () => {
+  $("searchInput").value = "";
+  $("clearSearch").style.display = "none";
+  browseAll();
+});
+
+$("settingsBtn").addEventListener("click", openSettings);
+$("settingsClose").addEventListener("click", closeSettings);
+$("settingsOverlay").addEventListener("click", e => {
+  if (e.target === $("settingsOverlay")) closeSettings();
+});
+
+$("themeBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  renderThemePicker();
+  $("themePop").classList.toggle("show");
+});
+document.addEventListener("click", e => {
+  if (!$("themePop").contains(e.target)) $("themePop").classList.remove("show");
+});
+document.querySelectorAll("#viewToggle button").forEach(b => {
+  if ((b.dataset.view || "grid") === state.view) b.classList.add("active");
+  else b.classList.remove("active");
+  b.addEventListener("click", () => {
+    state.view = b.dataset.view; state.visibleCount = PAGE_SIZE; saveConfig();
+    document.querySelectorAll("#viewToggle button").forEach(x =>
+      x.classList.toggle("active", x === b));
+    render();
+  });
+});
+$("setInstallFolder").addEventListener("click", async () => {
+  if (!canPickFolder()) { openFolderHelp(); return; }
+  try {
+    const dir = await window.showDirectoryPicker({ id: "funkforge-install", mode: "readwrite" });
+    INSTALL.dir = dir;
+    await idb.set("installDir", dir);
+    refreshInstallFolderUI();
+    toast(`📁 Install folder: ${dir.name}`, "success");
+  } catch (e) { if (e.name !== "AbortError") toast("Couldn't set folder", "error"); }
+});
+$("forgetInstallFolder").addEventListener("click", async () => {
+  INSTALL.dir = null; await idb.set("installDir", undefined);
+  refreshInstallFolderUI();
+});
+$("modalCopyLink").addEventListener("click", async () => {
+  try {
+    const files = await getModFiles(state.selected);
+    const f = files.find(x => x.id === state.selectedFileId) || files[0];
+    await navigator.clipboard.writeText(f.url);
+    toast("🔗 File link copied", "success");
+  } catch { toast("Couldn't copy link", "error"); }
+});
+
+$("compactSwitch").addEventListener("click", () => {
+  state.compact = !state.compact;
+  document.documentElement.style.setProperty("--card-size", state.compact ? "200px" : "280px");
+  saveConfig(); syncSwitches();
+});
+$("autoDlSwitch").addEventListener("click", () => {
+  state.autoDownload = !state.autoDownload;
+  saveConfig(); syncSwitches();
+  toast(state.autoDownload ? "Auto-download ON" : "Auto-download OFF");
+});
+$("askSaveSwitch").addEventListener("click", () => {
+  if (!canPickFolder()) { openFolderHelp(); return; }
+  state.askSave = !state.askSave;
+  saveConfig(); syncSwitches();
+});
+
+$("subfolderSwitch").addEventListener("click", () => {
+  state.subfolder = !state.subfolder; saveConfig(); syncSwitches();
+});
+$("pickFolderBtn").addEventListener("click", pickDownloadFolder);
+$("folderHelpClose").addEventListener("click", () => $("folderHelp").classList.remove("show"));
+$("folderHelp").addEventListener("click", e => { if (e.target.id === "folderHelp") $("folderHelp").classList.remove("show"); });
+$("folderHelpCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("folderHelpUrl").textContent); toast("Copied — paste it into a new tab", "success"); }
+  catch { toast("Select the link and copy it manually", "warn"); }
+});
+$("modalFolder").addEventListener("click", pickDownloadFolder);
+$("clearFolderBtn").addEventListener("click", async () => {
+  DL.dir = null; DL.perm = "prompt"; await idb.set("dlDir", undefined);
+  updateDownloadLocationUI(); toast("Using the browser's default Downloads folder");
+});
+$("proxyInput").addEventListener("change", e => {
+  state.proxy = e.target.value.trim(); saveConfig();
+  toast(state.proxy ? "Download proxy saved" : "Download proxy cleared");
+});
+
+$("clearInstalled").addEventListener("click", () => {
+  if (!Object.keys(state.installed).length) { toast("Nothing to clear"); return; }
+  if (!confirm("Clear all installed mods?")) return;
+  state.installed = {};
+  saveState(); updateSettingsCounts(); render();
+  toast("Installed list cleared", "success");
+});
+$("clearHistoryBtn").addEventListener("click", () => {
+  if (!state.history.length) { toast("Nothing to clear"); return; }
+  if (!confirm("Clear all history?")) return;
+  state.history = [];
+  saveState(); updateSettingsCounts(); render();
+  toast("History cleared", "success");
+});
+$("resetAll").addEventListener("click", () => {
+  if (!confirm("Reset EVERYTHING?")) return;
+  localStorage.clear(); location.reload();
+});
+
+document.documentElement.dataset.theme = state.theme === "midnight" ? "" : state.theme;
+document.body.dataset.theme = state.theme === "midnight" ? "" : state.theme;
+document.documentElement.style.setProperty("--card-size", state.compact ? "200px" : "280px");
+$("proxyInput").value = state.proxy;
+updateDownloadLocationUI();
+(async () => {
+  const hnd = await idb.get("dlDir");
+  if (hnd) {
+    DL.dir = hnd;
+    try { DL.perm = await hnd.queryPermission({ mode: "readwrite" }); } catch {}
+    updateDownloadLocationUI();
+  }
+  const inst = await idb.get("installDir");
+  if (inst) { INSTALL.dir = inst; refreshInstallFolderUI(); }
+})();
+syncSwitches();
+initQualitySeg();
+initSortDropdown();
+renderEnginePills();
+renderProfiles();
+renderThemePicker();
+(function renderSettingsThemes() {
+  const g = $("themeGridSettings"); if (!g) return;
+  g.innerHTML = "";
+  THEMES_LIST.forEach(([key, label, color]) => {
+    const d = document.createElement("div");
+    d.className = "theme-swatch" + (state.theme === key ? " active" : "");
+    d.innerHTML = `<div style="height:26px;border-radius:8px;background:${color};margin-bottom:6px"></div>${label}`;
+    d.addEventListener("click", () => {
+      applyTheme(key); renderThemePicker();
+      document.querySelectorAll("#themeGridSettings .theme-swatch").forEach(s =>
+        s.classList.toggle("active", s.textContent.includes(label.split(" ")[1])));
+      addHistory("theme", "Theme → " + label, "Changed appearance");
+      toast(`${label} theme`, "success");
+    });
+    g.appendChild(d);
+  });
+})();
+refreshInstallFolderUI();
+render();
+updateSettingsCounts();
+initSentinel();
+setTimeout(() => browseAll(), 200);
+
+})();
+</script>
+</body>
+</html>
