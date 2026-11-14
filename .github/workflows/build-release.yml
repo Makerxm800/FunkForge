@@ -49,7 +49,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-build.txt
-          python -m pip show pyinstaller | head -3
+          # NB: don't pipe pip's output into `head` -- closing the pipe early
+          # makes Python exit 120 (BrokenPipeError) and fails the step.
+          python -c "import PyInstaller, requests, PIL; print('pyinstaller', PyInstaller.__version__)" 
 
       - name: Build with PyInstaller
         run: python -m PyInstaller FunkForge.spec --noconfirm --clean
@@ -57,20 +59,7 @@ jobs:
       # ---------------- Windows ----------------
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: |
-          EXE="dist/FunkForge (Beta).exe"
-          if [ ! -f "$EXE" ]; then
-            echo "::error::Expected exe not found at: $EXE"
-            ls -la dist
-            exit 1
-          fi
-          mkdir -p staging
-          cp "$EXE" "staging/"
-          cp README.md License requirements.txt staging/ 2>/dev/null || true
-          cd staging
-          zip -r "../${{ matrix.artifact }}.zip" . -x '*.DS_Store'
-          cd ..
-          ls -la "${{ matrix.artifact }}.zip"
+        run: python tools/package_release.py "${{ matrix.artifact }}"
 
       # ---------------- macOS ----------------
       - name: Sign (macOS)
@@ -99,23 +88,25 @@ jobs:
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
+          # .dmg is the standard way to hand out a macOS app.
           hdiutil create \
             -volname "FunkForge (Beta)" \
             -srcfolder "dist/FunkForge (Beta).app" \
             -ov -format UDZO \
             "${{ matrix.artifact }}.dmg"
-          # Also ship a zip for people who prefer not to mount a DMG.
-          (cd dist && zip -qr "../${{ matrix.artifact }}.zip" "FunkForge (Beta).app" -x '*.DS_Store')
-          ls -la "${{ matrix.artifact }}.dmg" "${{ matrix.artifact }}.zip"
+          # Also ship a zip for people who'd rather not mount a DMG.
+          python tools/package_release.py "${{ matrix.artifact }}"
+          mkdir -p dist_pkg_dmg && mv "${{ matrix.artifact }}.dmg" dist_pkg_dmg/
+          ls -la dist_pkg_dmg/ dist_pkg/
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
-            ${{ matrix.artifact }}.zip
-            ${{ matrix.artifact }}.dmg
-          if-no-files-found: warn
+            dist_pkg/*.zip
+            dist_pkg_dmg/*.dmg
+          if-no-files-found: error
 
   release:
     name: Publish Release
@@ -149,7 +140,7 @@ jobs:
             | Platform | File | Notes |
             |---|---|---|
             | Windows 10/11 (64-bit) | `FunkForge-Beta-Windows-x64.zip` | Extract, then run **FunkForge (Beta).exe** |
-            | macOS (Apple Silicon + Intel) | `FunkForge-Beta-macOS.dmg` | Open the DMG, drag **FunkForge (Beta).app** to Applications |
+            | macOS (Apple Silicon + Intel) | `FunkForge-Beta-macOS.dmg` | Open the DMG, drag **FunkForge (Beta).app** to Applications (a `.zip` of the same app is also attached) |
 
             ### First launch notes
             - **Windows:** SmartScreen may say "Windows protected your PC".
