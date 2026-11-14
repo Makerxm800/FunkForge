@@ -24,6 +24,10 @@ jobs:
   build:
     name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    # Linux (AppImage/deb) is a bonus target and is the most environment
+    # sensitive. Let it fail without blocking the Windows/macOS release,
+    # which is what most people actually download.
+    continue-on-error: ${{ matrix.optional || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +41,7 @@ jobs:
           - os: ubuntu-latest
             label: Linux
             kind: linux
+            optional: true
 
     steps:
       - name: Checkout
@@ -62,6 +67,13 @@ jobs:
           python -m pip install pillow
           python tools/make_icons.py
           ls -la build/
+
+      - name: Install Linux packaging prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            fakeroot dpkg libarchive-tools rpm || true
 
       - name: Build ${{ matrix.label }} installer
         run: npm run dist:${{ matrix.kind }}
@@ -98,7 +110,9 @@ jobs:
   release:
     name: Publish Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.make_release
+    # `always()` because the optional Linux job is allowed to fail; the step
+    # below still refuses to publish unless real installers were produced.
+    if: always() && (startsWith(github.ref, 'refs/tags/v') || inputs.make_release)
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -113,6 +127,15 @@ jobs:
             \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' \
                -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} release/ \;
           ls -la release/
+          count=$(find release -type f | wc -l)
+          echo "installers: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No installers were produced - refusing to publish."
+            exit 1
+          fi
+          if ! ls release/*.exe release/*.dmg >/dev/null 2>&1; then
+            echo "::warning::Neither a Windows .exe nor a macOS .dmg was produced."
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
