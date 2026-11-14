@@ -1,3 +1,8 @@
-# FunkForge has NO external dependencies.
-# It uses only Python's standard library (tkinter, os, json, pathlib).
-# Nothing to install. Just run: python app.py
+# FunkForge (Beta) - runtime dependencies.
+#
+# These are the packages the app actually imports (app.py imports `requests`
+# and `PIL` at startup and refuses to run without them). Install with:
+#     pip install -r requirements.txt
+
+requests>=2.31.0
+pillow>=10.0.0

@@ -1,16 +1,17 @@
 # app.py
-# FunkForge Browser - FNF Mod Browser & Downloader
+# FunkForge (Beta) - FNF Mod Browser & Downloader
 # MIT License
 
 import base64, io, json, os, re, shutil, subprocess, sys, tempfile
 import threading, time, traceback, webbrowser, zipfile
-import argparse, functools, http.server, socket, socketserver
+import argparse, functools, hashlib, http.server, queue, socket, socketserver
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 
 try:
     import requests
-    from PIL import Image, ImageDraw, ImageTk, ImageFilter
+    from PIL import Image, ImageDraw
 except ImportError as _e:
     try:
         import tkinter as _tk
@@ -22,12 +23,44 @@ except ImportError as _e:
     except Exception:
         print(f"Missing package: {_e}\nRun: pip install requests pillow")
     raise SystemExit(1)
-import tkinter as tk
-import tkinter.font as tkfont
-from tkinter import ttk, filedialog, messagebox
+class _TkStub:
+    """Stand-in for the tkinter namespace when tkinter is not installed.
 
-PROGRAM_NAME = "FunkForge Browser"
-VERSION = "1.4.1"
+    A headless machine (server, CI, container, minimal Linux) may have no
+    tkinter at all. Importing it at module level used to crash the whole app,
+    which also broke `--web-only` even though that mode never opens a window.
+    Attribute access returns dummy classes so module-level definitions like
+    `class FButton(tk.Canvas)` still evaluate fine.
+    """
+
+    def __init__(self, name="tkinter"):
+        self.__name__ = name
+
+    def __getattr__(self, item):
+        # `except tk.TclError:` requires a real exception class.
+        base = (Exception,) if item.endswith("Error") else (object,)
+        cls = type(item, base, {"__module__": self.__name__})
+        setattr(self, item, cls)
+        return cls
+
+
+TK_AVAILABLE = True
+try:
+    import tkinter as tk
+    import tkinter.font as tkfont
+    from tkinter import ttk, filedialog, messagebox
+    from PIL import ImageTk
+except Exception:
+    TK_AVAILABLE = False
+    tk = _TkStub("tkinter")
+    tkfont = _TkStub("tkinter.font")
+    ttk = _TkStub("tkinter.ttk")
+    filedialog = _TkStub("tkinter.filedialog")
+    messagebox = _TkStub("tkinter.messagebox")
+    ImageTk = _TkStub("PIL.ImageTk")
+
+PROGRAM_NAME = "FunkForge (Beta)"
+VERSION = "1.5.0"
 AUTHOR = "Your Name"
 GB_API = "https://gamebanana.com/apiv11"
 FNF_GAME_ID = 8694
@@ -167,6 +200,178 @@ ARCHIVE_EXTS = (".zip", ".rar", ".7z", ".tar", ".gz")
 THUMB_SEM = threading.Semaphore(THUMB_CONCURRENCY)
 
 
+# ========== PERFORMANCE: IMAGE CACHE + BOUNDED WORKERS ==========
+# Before this, every re-render destroyed the rows and re-downloaded EVERY
+# thumbnail from GameBanana. With a few hundred mods that meant hundreds of
+# redundant HTTP requests on every scroll/sort/search — the main source of
+# lag. Now: RAM cache -> disk cache -> network, and only N fetches at once.
+
+APP_DIR_NAME = ".funkforge"
+CACHE_DIR = Path.home() / APP_DIR_NAME / "cache"
+IMAGE_CACHE_DIR = CACHE_DIR / "images"
+MAX_IMAGE_CACHE_BYTES = 256 * 1024 * 1024   # trim disk cache past 256 MB
+MEM_IMAGE_CACHE_MAX = 220                   # raw bytes kept in RAM
+
+_img_lock = threading.Lock()
+_mem_image_cache = OrderedDict()      # (url,size) -> raw bytes (LRU)
+_inflight = set()                     # urls currently being downloaded
+
+try:
+    IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+
+
+def _cache_path_for(url, size):
+    """Stable on-disk path for a (url, size) pair."""
+    key = f"{url}::{size[0]}x{size[1]}"
+    h = hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()
+    return IMAGE_CACHE_DIR / f"{h}.img"
+
+
+def _mem_cache_get(url, size):
+    key = f"{url}::{size[0]}x{size[1]}"
+    with _img_lock:
+        data = _mem_image_cache.get(key)
+        if data is not None:
+            _mem_image_cache.move_to_end(key)
+        return data
+
+
+def _mem_cache_put(url, size, data):
+    key = f"{url}::{size[0]}x{size[1]}"
+    with _img_lock:
+        _mem_image_cache[key] = data
+        _mem_image_cache.move_to_end(key)
+        while len(_mem_image_cache) > MEM_IMAGE_CACHE_MAX:
+            _mem_image_cache.popitem(last=False)
+
+
+def _trim_disk_cache():
+    """Delete oldest cache files until we're under the size budget."""
+    try:
+        files = [(p.stat().st_mtime, p.stat().st_size, p)
+                 for p in IMAGE_CACHE_DIR.glob("*.img")]
+        total = sum(s for _, s, _ in files)
+        if total <= MAX_IMAGE_CACHE_BYTES:
+            return
+        files.sort()                       # oldest first
+        for _, s, p in files:
+            if total <= MAX_IMAGE_CACHE_BYTES:
+                break
+            try:
+                p.unlink(); total -= s
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _cache_fetch_bytes(url, size):
+    """RAM -> disk -> network. Returns raw image bytes or None."""
+    if not url:
+        return None
+    cached = _mem_cache_get(url, size)
+    if cached is not None:
+        return cached
+
+    path = _cache_path_for(url, size)
+    try:
+        if path.is_file():
+            data = path.read_bytes()
+            if data:
+                _mem_cache_put(url, size, data)
+                return data
+    except Exception:
+        pass
+
+    # Collapse duplicate concurrent downloads of the same URL into one request.
+    with _img_lock:
+        if url in _inflight:
+            return None          # someone else is already fetching it
+        _inflight.add(url)
+    try:
+        r = gb_session().get(url, headers=HEADERS, timeout=12)
+        r.raise_for_status()
+        data = r.content
+        if not data:
+            return None
+        _mem_cache_put(url, size, data)
+        try:
+            path.write_bytes(data)
+        except Exception:
+            pass
+        return data
+    except Exception:
+        return None
+    finally:
+        with _img_lock:
+            _inflight.discard(url)
+
+
+# Bounded pool instead of "a thread per thumbnail" (which spawned hundreds of
+# threads on large result sets and starved the UI).
+class _ThumbPool:
+    def __init__(self, workers):
+        self.workers = max(2, int(workers))
+        self._q = queue.Queue()
+        self._threads = []
+        self._started = False
+        self._gen = 0            # bumped to abandon stale queued work
+
+    def start(self):
+        if self._started:
+            return
+        self._started = True
+        for i in range(self.workers):
+            t = threading.Thread(target=self._loop, name=f"ff-thumb-{i}",
+                                 daemon=True)
+            t.start()
+            self._threads.append(t)
+
+    def clear(self):
+        """Drop queued (but not yet started) jobs — used on new search/render."""
+        self._gen += 1
+        try:
+            while True:
+                self._q.get_nowait()
+        except Exception:
+            pass
+
+    def submit(self, gen, fn):
+        self.start()
+        self._q.put((gen, fn))
+
+    def _loop(self):
+        while True:
+            gen, fn = self._q.get()
+            try:
+                if gen != self._gen:
+                    continue
+                fn()
+            except Exception:
+                pass
+            finally:
+                try: self._q.task_done()
+                except Exception: pass
+
+
+THUMB_POOL = _ThumbPool(THUMB_CONCURRENCY)
+
+_NO_MATCH = object()   # sentinel: cached "searched, nothing found" result
+
+
+def submit_thumb(fn):
+    """Queue thumbnail work on the shared bounded pool."""
+    try:
+        THUMB_POOL.submit(fn)
+    except Exception:
+        try:
+            threading.Thread(target=fn, daemon=True).start()
+        except Exception:
+            pass
+
+
 # ========== UTILITIES ==========
 
 def load_config():
@@ -233,10 +438,19 @@ def is_official_name(name, official_set):
 
 
 def fetch_image(url, size):
+    """Load + downscale an image, via RAM cache -> disk cache -> network.
+
+    We cache raw *bytes*, never a decoded PIL image: callers resize in place
+    with .thumbnail(), so handing out a shared decoded image would corrupt
+    it for every other thread. Decoding from bytes is cheap and thread-safe.
+    """
+    data = _cache_fetch_bytes(url, size)
+    if not data:
+        return None
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        r.raise_for_status()
-        img = Image.open(io.BytesIO(r.content)).convert("RGB")
+        img = Image.open(io.BytesIO(data))
+        img.load()
+        img = img.convert("RGB")
         img.thumbnail(size, Image.LANCZOS)
         return img
     except Exception:
@@ -583,9 +797,13 @@ def _free_port(start=WEB_PORT_DEFAULT, tries=20):
     raise OSError("No free port available")
 
 
-def serve_web(port=None, open_browser=True, silent=False):
-    """Serve index.html on localhost + proxy /api/* to GameBanana.
-    Returns (httpd, url). Safe to call repeatedly — reuses the running server."""
+def serve_web(port=None, open_browser=True, silent=False, host=None):
+    """Serve index.html + proxy /api/* to GameBanana.
+
+    Returns (httpd, url). Safe to call repeatedly — reuses the running server.
+    `host` defaults to 127.0.0.1 (loopback only, nothing else on the network
+    can reach it); pass 0.0.0.0 to expose it on the LAN / a preview URL.
+    """
     global _web_server
     if _web_server is not None:
         url = getattr(_web_server, "_ff_url", "")
@@ -664,8 +882,10 @@ def serve_web(port=None, open_browser=True, silent=False):
         allow_reuse_address = True
         daemon_threads = True
 
-    httpd = _Reusable(("127.0.0.1", port), handler)
-    url = f"http://127.0.0.1:{port}/{index_path.name}"
+    bind_host = host or "127.0.0.1"
+    httpd = _Reusable((bind_host, port), handler)
+    host_for_url = "127.0.0.1" if bind_host in ("0.0.0.0", "") else bind_host
+    url = f"http://{host_for_url}:{port}/{index_path.name}"
     try: httpd._ff_url = url
     except Exception: pass
 
@@ -1470,6 +1690,46 @@ def find_official_game(max_seconds=8.0):
 
 # ========== ICON ==========
 
+def resource_path(rel):
+    """Absolute path to a bundled asset.
+
+    Works in normal runs and inside a PyInstaller one-file build, where data
+    files are unpacked into sys._MEIPASS at startup.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        p = Path(base) / rel
+        if p.exists():
+            return p
+    return Path(__file__).parent.resolve() / rel
+
+
+_icon_cache = {}
+
+
+def app_logo(size=64):
+    """The real FunkForge mark as a PIL image (falls back to the drawn one)."""
+    key = int(size)
+    hit = _icon_cache.get(key)
+    if hit is not None:
+        return hit
+    img = None
+    try:
+        p = resource_path("assets/logo.png")
+        if p.is_file():
+            im = Image.open(p)
+            im.load()
+            im = im.convert("RGBA")
+            im.thumbnail((size, size), Image.LANCZOS)
+            img = im
+    except Exception:
+        img = None
+    if img is None:
+        img = make_icon(size)
+    _icon_cache[key] = img
+    return img
+
+
 def make_icon(size=64, rotation=0.0):
     s = size
     base = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -1902,8 +2162,16 @@ class FunkForgeBrowser(tk.Tk):
         except Exception:
             self.font_family = "Segoe UI"
         try:
-            self._icon_ref = ImageTk.PhotoImage(make_icon(64))
+            self._icon_ref = ImageTk.PhotoImage(app_logo(256))
             self.iconphoto(True, self._icon_ref)
+            # On Windows the titlebar/taskbar icon comes from iconbitmap,
+            # so point it at the real .ico when it ships next to the app.
+            try:
+                _ico = resource_path("assets/logo.ico")
+                if _ico.is_file():
+                    self.iconbitmap(default=str(_ico))
+            except Exception:
+                pass
         except Exception: pass
         cfg = load_config()
         self.theme = cfg.get("theme", "dark") if cfg.get("theme") in THEMES else "dark"
@@ -1929,6 +2197,7 @@ class FunkForgeBrowser(tk.Tk):
         self._load_generation = 0
         self._page_more = True
         self.local_id_map = {}; self.local_token_map = {}
+        self._local_match_cache = {}   # online uid -> local rec (or _NO_MATCH)
         self._mod_scan_cache = {}; self._mod_scan_lock = threading.Lock()
         self.current_previews = []; self.preview_tk = []
         self.thumb_strip_tk = []; self.preview_idx = 0
@@ -1988,6 +2257,7 @@ class FunkForgeBrowser(tk.Tk):
 
     def _rebuild_local_index(self):
         self.local_id_map.clear(); self.local_token_map.clear()
+        self._local_match_cache.clear()
         for r in self.local_records:
             name = r.get("_sName") or ""
             norm = normalize_mod_name(name)
@@ -2578,7 +2848,10 @@ class FunkForgeBrowser(tk.Tk):
             self.after(0, lambda: self._on_results(recs, True))
         except Exception as e:
             traceback.print_exc(); self.browse_loading = False
-            self.after(0, lambda: self.set_status(f"Load failed: {e}"))
+            # NOTE: `e` is deleted when the except block exits, so a deferred
+            # lambda capturing it would raise NameError later. Bind the message.
+            err = str(e)
+            self.after(0, lambda: self.set_status(f"Load failed: {err}"))
 
     def load_all_pages(self):
         if self.mode != "browse": self.set_mode("browse")
@@ -2657,6 +2930,8 @@ class FunkForgeBrowser(tk.Tk):
                          args=(gen, q), daemon=True).start()
 
     def _clear_results(self):
+        try: THUMB_POOL.clear()
+        except Exception: pass
         for w in self.results_frame.winfo_children(): w.destroy()
         self.selected_mod = None
         if self.mode == "browse":
@@ -2764,18 +3039,33 @@ class FunkForgeBrowser(tk.Tk):
         threading.Thread(target=self._scan_local_bg, daemon=True).start()
 
     def _local_match(self, online_rec):
+        # Memoized: this used to be an O(n) scan run once per row (and once per
+        # record while sorting), i.e. O(n^2) on every render -- with a few
+        # hundred mods that alone made sorting/sorting feel frozen.
+        uid = rec_uid(online_rec)
+        if uid:
+            hit = self._local_match_cache.get(uid)
+            if hit is not None:
+                return None if hit is _NO_MATCH else hit
         for r in self.local_records:
             if (r.get("_idRow") and online_rec.get("_idRow")
                     and (online_rec.get("_sModelName") or "Mod") == "Mod"
                     and r["_idRow"] == online_rec["_idRow"]):
+                if uid: self._local_match_cache[uid] = r
                 return r
         name = (online_rec.get("_sName") or "").strip()
         if not name: return None
         norm = normalize_mod_name(name)
-        if norm and norm in self.local_id_map: return self.local_id_map[norm]
+        if norm and norm in self.local_id_map:
+            r = self.local_id_map[norm]
+            if uid: self._local_match_cache[uid] = r
+            return r
         toks = frozenset(extract_tokens(name))
         if toks:
-            if toks in self.local_token_map: return self.local_token_map[toks]
+            if toks in self.local_token_map:
+                r = self.local_token_map[toks]
+                if uid: self._local_match_cache[uid] = r
+                return r
             best = None; best_s = 0.0
             for lt, rec in self.local_token_map.items():
                 if not lt: continue
@@ -2783,7 +3073,10 @@ class FunkForgeBrowser(tk.Tk):
                 if not inter: continue
                 s = len(inter) / max(1, min(len(toks), len(lt)))
                 if s > best_s: best_s = s; best = rec
-            if best and best_s >= 0.6: return best
+            if best and best_s >= 0.6:
+                if uid: self._local_match_cache[uid] = best
+                return best
+        if uid: self._local_match_cache[uid] = _NO_MATCH
         return None
 
     # ---------- SORT / FILTER ----------
@@ -2855,6 +3148,10 @@ class FunkForgeBrowser(tk.Tk):
         return self._sorted_records(source)
 
     def _rerender(self):
+        # Rows we're about to destroy may still have thumbnails queued; drop
+        # that work so the pool spends its slots on what's on screen now.
+        try: THUMB_POOL.clear()
+        except Exception: pass
         records = self._filtered_records()
         for w in self.results_frame.winfo_children(): w.destroy()
         self.thumb_refs.clear(); self.row_thumb_refs.clear()
@@ -2912,7 +3209,6 @@ class FunkForgeBrowser(tk.Tk):
     # ---------- BROWSE ROW ----------
 
     def _build_row(self, rec):
-        t = THEMES[self.theme]
         row = ttk.Frame(self.results_frame, style="Result.TFrame", padding=8)
         row.pack(fill="x", padx=2, pady=3)
         thumb = tk.Label(row, width=12, height=4, borderwidth=0, cursor="hand2")
@@ -2961,11 +3257,9 @@ class FunkForgeBrowser(tk.Tk):
             w.bind("<Enter>", on_enter); w.bind("<Leave>", on_leave)
             w.bind("<Button-1>", lambda e, r=rec: self.select_mod(r))
         if local and local.get("_preview_path"):
-            threading.Thread(target=self._load_local_thumb,
-                             args=(local, thumb), daemon=True).start()
+            submit_thumb(lambda: self._load_local_thumb(local, thumb))
         else:
-            threading.Thread(target=self._load_thumb, args=(rec, thumb),
-                             daemon=True).start()
+            submit_thumb(lambda: self._load_thumb(rec, thumb))
 
     def _load_local_thumb(self, local_rec, label):
         p = local_rec.get("_preview_path")
@@ -3088,8 +3382,7 @@ class FunkForgeBrowser(tk.Tk):
                    lambda n=name: self.toggle_official(n))
             mk_btn("🗑  Delete", lambda p=fp, n=name: self._delete_mod(p, n),
                    bg=t["danger"], fg="#ffffff")
-        threading.Thread(target=self._load_mod_thumb, args=(rec, thumb),
-                         daemon=True).start()
+        submit_thumb(lambda: self._load_mod_thumb(rec, thumb))
 
     def _build_mods_grid(self, records):
         # REMADE grid: always 4 across on desktop, 3/2 as the window shrinks.
@@ -3171,8 +3464,7 @@ class FunkForgeBrowser(tk.Tk):
                lambda n=name: self.toggle_official(n)).pack(side="left", padx=1)
             mk("🗑", lambda p=fp, n=name: self._delete_mod(p, n),
                bg=t["danger"], fg="#ffffff").pack(side="left", padx=1)
-        threading.Thread(target=self._load_mod_card_thumb, args=(rec, thumb),
-                         daemon=True).start()
+        submit_thumb(lambda: self._load_mod_card_thumb(rec, thumb))
         return card
 
     def _load_mod_card_thumb(self, rec, label):
@@ -3287,7 +3579,6 @@ class FunkForgeBrowser(tk.Tk):
     def _refresh_badge(self):
         if not self.selected_mod: return
         t = THEMES[self.theme]
-        name = self.selected_mod.get("_sName", "")
         parts = []
         if is_official_rec(self.selected_mod, self.official_mods):
             parts.append("🌟 OFFICIAL")
@@ -3341,11 +3632,9 @@ class FunkForgeBrowser(tk.Tk):
         self.spinner.start()
         local = self._local_match(rec)
         if local and local.get("_preview_path"):
-            threading.Thread(target=self._load_local_previews,
-                             args=(local,), daemon=True).start()
+            submit_thumb(lambda: self._load_local_previews(local))
         else:
-            threading.Thread(target=self._load_previews, args=(rec,),
-                             daemon=True).start()
+            submit_thumb(lambda: self._load_previews(rec))
         threading.Thread(target=self._load_details, args=(rec,),
                          daemon=True).start()
 
@@ -3496,7 +3785,8 @@ class FunkForgeBrowser(tk.Tk):
             text = strip_html(html)[:2500] or "(no description)"
             self.after(0, lambda: self._show_desc(text))
         except Exception as e:
-            self.after(0, lambda: self._show_desc(f"(failed to load: {e})"))
+            err = str(e)
+            self.after(0, lambda: self._show_desc(f"(failed to load: {err})"))
 
     def _show_desc(self, text):
         self.desc.config(state="normal")
@@ -3603,10 +3893,11 @@ class FunkForgeBrowser(tk.Tk):
                 self.after(0, self._refresh_badge)
             except Exception as e:
                 traceback.print_exc()
-                self._ui_status(f"Download failed: {e}")
-                self.after(0, lambda: self.notify("Download failed", f"{name}: {e}"))
+                err = str(e)
+                self._ui_status(f"Download failed: {err}")
+                self.after(0, lambda: self.notify("Download failed", f"{name}: {err}"))
                 self.after(0, lambda: self.log_history("download", name,
-                                                        f"❌ Failed: {e}"))
+                                                        f"❌ Failed: {err}"))
 
     def _ui_status(self, text):
         self.after(0, lambda: self.set_status(text))
@@ -3781,7 +4072,7 @@ class FunkForgeBrowser(tk.Tk):
 
 
 if __name__ == "__main__":
-    _p = argparse.ArgumentParser(description="FunkForge — FNF Mod Browser")
+    _p = argparse.ArgumentParser(description="FunkForge (Beta) — FNF Mod Browser")
     _p.add_argument("--web", action="store_true",
                     help="Launch the browser-based UI (serves index.html "
                          "on localhost and opens your browser)")
@@ -3791,13 +4082,17 @@ if __name__ == "__main__":
                     help="Port for the web server (default: auto)")
     _p.add_argument("--no-open", action="store_true",
                     help="Don't auto-open the browser")
+    _p.add_argument("--host", default=None,
+                    help="Bind address for the web server "
+                         "(default 127.0.0.1; use 0.0.0.0 to allow "
+                         "other devices / a hosted preview to connect)")
     _args = _p.parse_args()
 
     if _args.web_only:
         try:
-            httpd, url = serve_web(port=_args.port,
+            httpd, url = serve_web(port=_args.port, host=_args.host,
                                    open_browser=not _args.no_open)
-            print(f"[FunkForge] Web-only mode — press Ctrl+C to stop.")
+            print("[FunkForge] Web-only mode — press Ctrl+C to stop.")
             print(f"[FunkForge] Open: {url}")
             try:
                 while True:
@@ -3812,6 +4107,14 @@ if __name__ == "__main__":
             print(f"[FunkForge] Failed: {e}")
             sys.exit(1)
     else:
+        if not TK_AVAILABLE:
+            print("FunkForge: the desktop GUI needs tkinter, which is not "
+                  "installed on this system.\n"
+                  "  - Windows/macOS: reinstall Python and enable 'tcl/tk'.\n"
+                  "  - Debian/Ubuntu: sudo apt install python3-tk\n"
+                  "The web UI needs no GUI toolkit -- run:  "
+                  "python app.py --web-only")
+            sys.exit(1)
         try:
             app = FunkForgeBrowser()
             if _args.web and not _args.no_open:
