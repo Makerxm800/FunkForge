@@ -1,16 +1,15 @@
-# Python
+# Node / Electron
+node_modules/
+dist/
+out/
+*.log
+npm-debug.log*
+
+# Python (legacy + icon tooling)
 __pycache__/
 *.py[cod]
-*.pyo
 .venv/
 venv/
-env/
-
-# PyInstaller
-build/
-dist/
-*.manifest
-*.spec.bak
 
 # OS junk
 .DS_Store

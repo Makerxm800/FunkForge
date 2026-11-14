@@ -1,0 +1,94 @@
+{
+  "name": "funkforge",
+  "version": "2.0.0",
+  "description": "FunkForge (Beta) — a modern desktop app for browsing, installing and managing Friday Night Funkin' mods",
+  "main": "electron/main.js",
+  "author": "Makerxm800",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Makerxm800/FunkForge.git"
+  },
+  "homepage": "https://github.com/Makerxm800/FunkForge",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "server": "node electron/server.js --serve-only",
+    "preview": "node electron/server.js --serve-only --host 0.0.0.0 --port 8756",
+    "icons": "python3 tools/make_icons.py",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.makerxm800.funkforge",
+    "productName": "FunkForge (Beta)",
+    "copyright": "Copyright © 2026 Makerxm800",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "publish": null,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "artifactName": "FunkForge-Beta-${version}-${arch}-${os}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FunkForge (Beta)"
+    },
+    "portable": {
+      "artifactName": "FunkForge-Beta-${version}-${arch}-portable.${ext}"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "artifactName": "FunkForge-Beta-${version}-${arch}-${os}.${ext}",
+      "extendInfo": {
+        "NSHighResolutionCapable": true
+      }
+    },
+    "dmg": {
+      "title": "FunkForge (Beta) ${version}",
+      "iconSize": 110,
+      "contents": [
+        { "x": 130, "y": 200 },
+        { "x": 400, "y": 200, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Game;Utility",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "artifactName": "FunkForge-Beta-${version}-${arch}.${ext}"
+    }
+  }
+}
