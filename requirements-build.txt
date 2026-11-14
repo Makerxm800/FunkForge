@@ -1,0 +1,5 @@
+# Extra dependencies needed ONLY to package FunkForge into a real
+# Windows .exe / macOS .app with PyInstaller. Not needed to just run the app.
+-r requirements.txt
+
+pyinstaller>=6.3.0
