@@ -56,6 +56,9 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller FunkForge.spec --noconfirm --clean
 
+      - name: Verify the binary is a real native executable
+        run: python tools/verify_build.py
+
       # ---------------- Windows ----------------
       - name: Package (Windows)
         if: runner.os == 'Windows'
