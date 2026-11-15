@@ -17,12 +17,13 @@ const state = {
   loading: false,
   query: '',
   sort: 'downloads',
-  installed: [],          // local mod records
+  installed: [],
   installedNames: new Set(),
   config: null,
   meta: null,
   selected: null,
   selectedFile: null,
+  selectedImages: [],
   imgIndex: 0,
 };
 
@@ -56,19 +57,26 @@ const fmtDate = (ts) => {
     { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-const fmtAgo = (ms) => {
-  const d = Math.max(0, Date.now() - Number(ms || 0)) / 1000;
-  if (d < 60) return 'just now';
-  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
-  if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
-  if (d < 2592000) return `${Math.floor(d / 86400)}d ago`;
-  return new Date(ms).toLocaleDateString();
-};
-
 const initials = (s) => String(s || '?')
   .replace(/[^\p{L}\p{N} ]/gu, ' ')
   .split(/\s+/).filter(Boolean).slice(0, 2)
   .map((w) => w[0].toUpperCase()).join('') || '?';
+
+/** "Today" / "Yesterday" / "12 Mar" */
+function dayLabel(ms) {
+  const d = new Date(ms);
+  const today = new Date();
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(today) - startOf(d)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function clockTime(ms) {
+  return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
 
 function setStatus(text) { $('#status').textContent = text; }
 
@@ -87,7 +95,7 @@ function toast(msg, kind = 'info', ms = 3600) {
   $('#toasts').appendChild(el);
   setTimeout(() => {
     el.classList.add('out');
-    setTimeout(() => el.remove(), 220);
+    setTimeout(() => el.remove(), 300);
   }, ms);
 }
 
@@ -112,15 +120,55 @@ const apiPost = (path, body) => api(path, { method: 'POST', body: JSON.stringify
 
 /* ------------------------------------------------------------------ theming */
 function applyTheme(name) {
-  document.documentElement.dataset.theme = name || 'midnight';
+  const root = document.documentElement;
+  // Smooth cross-fade: briefly let transitions run on the colour change.
+  root.classList.add('theming');
+  root.dataset.theme = name || 'midnight';
+  clearTimeout(applyTheme._t);
+  applyTheme._t = setTimeout(() => root.classList.remove('theming'), 500);
 }
+
 function applyLayout(mode) {
   state.layout = mode;
   $('#grid').classList.toggle('list-view', mode === 'list');
-  $$('#viewToggle button').forEach((b) => b.classList.toggle('is-active', b.dataset.view === mode));
+  $$('#viewToggle button, #setViewToggle button').forEach((b) => {
+    if (b.dataset.view === mode) b.classList.add('is-active');
+    else b.classList.remove('is-active');
+  });
 }
 
-/* --------------------------------------------------------------- connection */
+/* --------------------------------------------------------- nav tab indicator */
+function moveNavIndicator() {
+  const active = $('.nav-item.is-active');
+  const ind = $('#navIndicator');
+  if (!active || !ind) return;
+  ind.style.height = `${active.offsetHeight - 10}px`;
+  ind.style.transform = `translateY(${active.offsetTop + 5}px)`;
+  ind.classList.add('on');
+}
+
+/* ------------------------------------------------------------------- modal
+   Kept visible during the close transition, then hidden, so closing animates
+   instead of snapping away. */
+let modalCloseTimer = null;
+
+function openModal() {
+  clearTimeout(modalCloseTimer);
+  const m = $('#modal');
+  m.hidden = false;
+  requestAnimationFrame(() => m.classList.add('show'));
+}
+
+function closeModal() {
+  const m = $('#modal');
+  if (m.hidden) return;
+  m.classList.remove('show');
+  clearTimeout(modalCloseTimer);
+  modalCloseTimer = setTimeout(() => { m.hidden = true; }, 240);
+  state.selected = null;
+}
+
+/* ---------------------------------------------------------------- connection */
 async function checkHealth() {
   try {
     await api('/api/health');
@@ -133,7 +181,7 @@ async function checkHealth() {
 }
 
 /* ------------------------------------------------------------------- render */
-function cardHtml(item) {
+function cardHtml(item, index) {
   const isLocal = !!item.local;
   const img = isLocal
     ? (item.preview ? `/api/local-img?path=${encodeURIComponent(item.preview)}` : '')
@@ -149,11 +197,16 @@ function cardHtml(item) {
     ? `<span class="author">${esc(item.name)}</span><span>📦 ${fmtSize(item.size)}</span>`
     : `<span class="author">👤 ${esc(item.author)}</span><span>⬇ ${fmtNum(item.downloads)}</span>`;
 
+  // Stagger the entrance, but cap it so late cards don't crawl in.
+  const delay = Math.min(index, 14) * 28;
+
   return `
-    <article class="card" data-id="${esc(isLocal ? item.dir : item.id)}" data-local="${isLocal ? 1 : 0}">
+    <article class="card" style="--d:${delay}ms"
+             data-id="${esc(isLocal ? item.dir : item.id)}" data-local="${isLocal ? 1 : 0}">
       <div class="card-img-wrap">
         ${img
           ? `<img class="card-img" loading="lazy" src="${esc(img)}" alt=""
+                 onload="this.classList.add('loaded')"
                  onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">`
           : ''}
         <div class="card-img-fallback" style="${img ? 'display:none' : ''}">${esc(initials(item.name))}</div>
@@ -168,16 +221,14 @@ function cardHtml(item) {
     </article>`;
 }
 
-function renderItems(append = false) {
+function renderItems() {
   const grid = $('#grid');
-  if (!append) grid.innerHTML = '';
-  const start = append ? grid.children.length : 0;
-  const chunk = state.items.slice(start);
-  grid.insertAdjacentHTML('beforeend', chunk.map(cardHtml).join(''));
+  grid.innerHTML = state.items.map(cardHtml).join('');
 
   const empty = !state.items.length;
   $('#empty').hidden = !empty;
   if (empty) {
+    $('#emptyArt').textContent = state.view === 'installed' ? '📦' : '🎤';
     $('#emptyTitle').textContent = state.view === 'installed'
       ? 'No mods installed yet'
       : (state.query ? `No results for “${state.query}”` : 'Nothing to show');
@@ -185,7 +236,8 @@ function renderItems(append = false) {
       ? 'Install something from Discover, or drop a mod folder into your mods folder.'
       : (state.query ? 'Try a different search term.' : 'Check your connection and try again.');
   }
-  $('#resultsCount').textContent = `${state.items.length} ${state.view === 'installed' ? 'installed' : 'result'}${state.items.length === 1 ? '' : 's'}`;
+  $('#resultsCount').textContent =
+    `${state.items.length} ${state.view === 'installed' ? 'installed' : 'result'}${state.items.length === 1 ? '' : 's'}`;
   $('#loadMore').hidden = state.view === 'installed' || !state.more || empty;
 }
 
@@ -202,8 +254,9 @@ function showSkeletons(on) {
 async function loadDiscover(reset = true) {
   if (state.loading) return;
   state.loading = true;
-  if (reset) { state.page = 1; state.items = []; showSkeletons(true); $('#grid').innerHTML = ''; }
+  if (reset) { state.page = 1; state.items = []; showSkeletons(true); $('#grid').innerHTML = ''; $('#empty').hidden = true; }
   setStatus(state.query ? `Searching for “${state.query}”…` : 'Browsing mods…');
+  setConn('loading', 'Loading…');
 
   try {
     const q = state.query
@@ -217,13 +270,13 @@ async function loadDiscover(reset = true) {
     state.items = reset ? fresh : state.items.concat(fresh);
     state.more = !!data.more;
     showSkeletons(false);
-    renderItems(false);
+    renderItems();
     setStatus(state.query ? `Found ${state.items.length} results` : `Loaded ${state.items.length} mods`);
     setConn('ok', 'Online');
   } catch (err) {
     showSkeletons(false);
     state.items = reset ? [] : state.items;
-    renderItems(false);
+    renderItems();
     setConn('err', 'GameBanana unreachable');
     setStatus(`Couldn't reach GameBanana: ${err.message}`);
     if (reset) toast(`Couldn't load mods: ${err.message}`, 'err', 5200);
@@ -235,42 +288,70 @@ async function loadDiscover(reset = true) {
 async function loadInstalled() {
   showSkeletons(true);
   $('#grid').innerHTML = '';
+  $('#empty').hidden = true;
   try {
     const data = await api('/api/local');
     state.installed = data.mods || [];
     state.installedNames = new Set(state.installed.map((m) => String(m.name).toLowerCase().trim()));
     state.items = state.installed.map((m) => ({ ...m, local: true }));
     showSkeletons(false);
-    renderItems(false);
+    renderItems();
     setStatus(`${state.installed.length} mod(s) in ${data.folder}`);
     setConn('ok', 'Online');
   } catch (err) {
     showSkeletons(false);
     state.items = [];
-    renderItems(false);
+    renderItems();
     setStatus(`Couldn't read the mods folder: ${err.message}`);
     setConn('err', 'Backend offline');
   }
 }
 
+/* ------------------------------------------------------------------ history
+   Grouped by day on a timeline, newest day first. */
+const HISTORY_ICONS = {
+  install: '📥', uninstall: '🗑', launch: '🎮', settings: '⚙',
+};
+
 async function loadHistory() {
+  const box = $('#historyList');
+  let entries;
   try {
-    const entries = await api('/api/history');
-    const icons = { install: '📥', uninstall: '🗑', launch: '🎮', settings: '⚙' };
-    $('#historyList').innerHTML = entries.length
-      ? entries.map((e) => `
+    entries = await api('/api/history');
+  } catch (_) {
+    box.innerHTML = '<div class="empty"><div class="empty-art">⚠️</div><h3>Couldn’t load history</h3></div>';
+    return;
+  }
+  if (!entries.length) {
+    box.innerHTML = `<div class="empty">
+      <div class="empty-art">🕘</div>
+      <h3>No activity yet</h3>
+      <p>Things you install, launch or change show up here.</p></div>`;
+    return;
+  }
+
+  const days = new Map();
+  for (const e of entries) {
+    const key = dayLabel(e.ts);
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(e);
+  }
+
+  box.innerHTML = Array.from(days.entries()).map(([day, list], di) => `
+    <div class="timeline-day" style="animation-delay:${Math.min(di, 6) * 50}ms">
+      <div class="timeline-day-label">${esc(day)}</div>
+      <div class="timeline-items">
+        ${list.map((e) => `
           <div class="history-item">
-            <div class="history-icon">${icons[e.kind] || '•'}</div>
+            <div class="history-icon k-${esc(e.kind || 'other')}">${HISTORY_ICONS[e.kind] || '•'}</div>
             <div class="history-main">
               <strong>${esc(e.name)}</strong>
-              <small>${esc(e.detail || '')}</small>
+              ${e.detail ? `<small>${esc(e.detail)}</small>` : ''}
             </div>
-            <div class="history-time">${fmtAgo(e.ts)}</div>
-          </div>`).join('')
-      : '<div class="empty"><div class="empty-art">🕘</div><h3>No activity yet</h3><p>Things you install or launch show up here.</p></div>';
-  } catch (_) {
-    $('#historyList').innerHTML = '<div class="empty"><h3>Couldn’t load history</h3></div>';
-  }
+            <div class="history-time">${clockTime(e.ts)}</div>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
 }
 
 /* ------------------------------------------------------------------- detail */
@@ -278,14 +359,15 @@ async function openDetail(item) {
   state.selected = item;
   state.selectedFile = null;
   state.imgIndex = 0;
+  $('#installProgress').textContent = '';
 
-  // Local installed mod
   if (item.local) {
     $('#modalTitle').textContent = item.name;
-    $('#modalBadges').innerHTML = `
-      <span class="badge badge-installed">✓ Installed</span>
-      ${item.engine ? `<span class="badge badge-engine">⚙ ${esc(item.engine)}</span>` : ''}
-      ${item.size ? `<span class="badge badge-size">${fmtSize(item.size)}</span>` : ''}`;
+    $('#modalBadges').innerHTML = [
+      '<span class="badge badge-installed">✓ Installed</span>',
+      item.engine ? `<span class="badge badge-engine">⚙ ${esc(item.engine)}</span>` : '',
+      item.size ? `<span class="badge badge-size">${fmtSize(item.size)}</span>` : '',
+    ].join('');
     $('#modalMeta').innerHTML = `<span>📁 ${esc(item.dir)}</span>`;
     $('#modalDesc').textContent = item.exe
       ? 'An executable was found in this mod folder, so you can launch it directly.'
@@ -298,11 +380,10 @@ async function openDetail(item) {
     btn.disabled = false;
     $('#openPageBtn').hidden = true;
     updateGallery();
-    $('#modal').hidden = false;
+    openModal();
     return;
   }
 
-  // Online mod
   $('#modalTitle').textContent = item.name;
   $('#modalBadges').innerHTML = [
     item.official ? '<span class="badge badge-official">🌟 Official</span>' : '',
@@ -323,7 +404,7 @@ async function openDetail(item) {
   btn.disabled = true;
   $('#openPageBtn').hidden = false;
   updateGallery();
-  $('#modal').hidden = false;
+  openModal();
 
   try {
     const data = await api(`/api/details/${encodeURIComponent(item.model || 'Mod')}/${item.id}`);
@@ -365,11 +446,11 @@ function updateGallery() {
     return;
   }
   img.style.display = '';
+  img.classList.remove('loaded');
+  img.onload = () => img.classList.add('loaded');
   img.src = imgs[state.imgIndex];
   $('#imgCounter').textContent = `${state.imgIndex + 1} / ${imgs.length}`;
 }
-
-function closeModal() { $('#modal').hidden = true; state.selected = null; }
 
 /* ------------------------------------------------------------------ install */
 async function doInstall() {
@@ -391,6 +472,7 @@ async function doInstall() {
       toast(`Removed ${item.name}`, 'ok');
       closeModal();
       loadInstalled();
+      refreshCounts();
     } catch (err) { toast(`Couldn't remove: ${err.message}`, 'err'); }
     btn.disabled = false; prog.textContent = '';
     return;
@@ -413,11 +495,10 @@ async function doInstall() {
     toast(`Installed ${out.name}`, 'ok', 5000);
     item.installed = true;
     state.installedNames.add(String(item.name).toLowerCase().trim());
-    renderItems(false);
-    $('#modalBadges').innerHTML = `<span class="badge badge-installed">✓ Installed</span>${$('#modalBadges').innerHTML}`;
     btn.textContent = '✓ Installed';
+    renderItems();
     if (DESKTOP) window.ff.notify({ title: 'FunkForge', body: `Installed ${out.name}` });
-    refreshFolderCard();
+    refreshCounts();
     if (state.view === 'installed') loadInstalled();
   } catch (err) {
     prog.textContent = '';
@@ -435,7 +516,6 @@ async function changeFolder() {
       defaultPath: state.config?.modsFolder,
     });
   } else {
-    // Browser mode has no native dialog — fall back to a typed path.
     const typed = prompt('Mods folder path:', state.config?.modsFolder || '');
     picked = typed && typed.trim() ? typed.trim() : null;
   }
@@ -455,12 +535,11 @@ async function openFolder() {
 }
 
 async function refreshFolderCard() {
-  const path = state.config?.modsFolder || '—';
-  $('#folderPath').textContent = path;
-  $('#folderPath').title = path;
+  const p = state.config?.modsFolder || '—';
+  $('#folderPath').textContent = p;
+  $('#folderPath').title = p;
   $('#setModsFolder').value = state.config?.modsFolder || '';
-  const hint = DESKTOP ? '' : 'Browser preview: path picking is disabled here.';
-  $('#folderHint').textContent = hint;
+  $('#folderHint').textContent = DESKTOP ? '' : 'Browser preview: native picking is disabled here.';
 }
 
 /* -------------------------------------------------------------------- config */
@@ -471,19 +550,47 @@ async function saveConfig(patch) {
   if (patch.theme) applyTheme(patch.theme);
 }
 
-/* ---------------------------------------------------------------- navigation */
-function setView(view) {
-  state.view = view;
+/* --------------------------------------------------------------- navigation */
+/**
+ * Switch panes without touching the search box.
+ *
+ * This is separate from setView() on purpose: the search handler calls this
+ * after setting state.query. Routing it through setView() used to wipe the
+ * query it had just set, so every search silently reset to "browse all".
+ */
+function switchPane(view) {
   $$('.nav-item').forEach((b) => b.classList.toggle('is-active', b.dataset.view === view));
+  moveNavIndicator();
   $('#resultsView').hidden = !['discover', 'installed'].includes(view);
   $('#historyView').hidden = view !== 'history';
   $('#settingsView').hidden = view !== 'settings';
   $('#toolbar').hidden = !['discover', 'installed'].includes(view);
   $('#loadMore').hidden = true;
+}
 
-  if (view === 'discover') { state.query = ''; $('#search').value = ''; $('#clearSearch').hidden = true; loadDiscover(); }
+/** User-driven navigation (nav click): resets search and reloads. */
+function setView(view) {
+  state.view = view;
+  if (view === 'discover') {
+    state.query = '';
+    $('#search').value = '';
+    $('#clearSearch').hidden = true;
+  }
+  switchPane(view);
+
+  if (view === 'discover') loadDiscover();
   else if (view === 'installed') loadInstalled();
   else if (view === 'history') loadHistory();
+}
+
+/** Search: keeps the typed query intact (this is the bug fix). */
+function runSearch(q) {
+  state.query = q;
+  if (state.view !== 'discover') {
+    state.view = 'discover';
+    switchPane('discover');
+  }
+  loadDiscover();
 }
 
 /* ------------------------------------------------------------------ settings */
@@ -492,7 +599,6 @@ function fillSettings() {
   $('#setModsFolder').value = c.modsFolder || '';
   $('#setGameExe').value = c.gameExe || '';
   $('#setTheme').value = c.theme || 'midnight';
-  $('#setView').value = c.view || 'grid';
   $('#setMinDownloads').value = c.minDownloads ?? 0;
   applyTheme(c.theme || 'midnight');
   applyLayout(c.view || 'grid');
@@ -513,9 +619,23 @@ async function pickExe() {
   $('#setGameExe').value = picked;
 }
 
+async function refreshCounts() {
+  try {
+    const d = await api('/api/local');
+    state.installed = d.mods || [];
+    state.installedNames = new Set(state.installed.map((m) => String(m.name).toLowerCase().trim()));
+    const el = $('#installedCount');
+    el.textContent = String(state.installed.length);
+    // Little bump so a change is noticeable.
+    el.animate(
+      [{ transform: 'scale(1)' }, { transform: 'scale(1.28)' }, { transform: 'scale(1)' }],
+      { duration: 340, easing: 'cubic-bezier(.22,1,.36,1)' },
+    );
+  } catch (_) { /* ignore */ }
+}
+
 /* --------------------------------------------------------------------- wiring */
 function wire() {
-  // window controls (desktop only)
   if (DESKTOP) {
     $('#windowControls').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-act]');
@@ -527,36 +647,38 @@ function wire() {
     });
   } else {
     $('#windowControls').hidden = true;
-    $('#titlebar').style.paddingLeft = '14px';
   }
 
-  // nav
   $('#nav').addEventListener('click', (e) => {
     const btn = e.target.closest('.nav-item');
     if (btn) setView(btn.dataset.view);
   });
 
-  // search
+  /* ---------------- search (fixed) ---------------- */
   let debounce;
   $('#search').addEventListener('input', (e) => {
     const v = e.target.value;
     $('#clearSearch').hidden = !v;
     clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      state.query = v.trim();
-      setView('discover');
-    }, 380);
+    debounce = setTimeout(() => runSearch(v.trim()), 360);
   });
   $('#search').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
       clearTimeout(debounce);
-      state.query = e.target.value.trim();
-      setView('discover');
+      runSearch(e.target.value.trim());
+    }
+    if (e.key === 'Escape' && e.target.value) {
+      e.target.value = '';
+      $('#clearSearch').hidden = true;
+      runSearch('');
     }
   });
   $('#clearSearch').addEventListener('click', () => {
-    $('#search').value = ''; $('#clearSearch').hidden = true;
-    state.query = ''; setView('discover'); $('#search').focus();
+    $('#search').value = '';
+    $('#clearSearch').hidden = true;
+    runSearch('');
+    $('#search').focus();
   });
 
   $('#sort').addEventListener('change', (e) => {
@@ -564,19 +686,20 @@ function wire() {
     if (state.view === 'discover') loadDiscover();
   });
 
-  $('#viewToggle').addEventListener('click', (e) => {
+  const layoutHandler = (e) => {
     const btn = e.target.closest('[data-view]');
     if (!btn) return;
     applyLayout(btn.dataset.view);
     saveConfig({ view: btn.dataset.view });
-  });
+  };
+  $('#viewToggle').addEventListener('click', layoutHandler);
+  $('#setViewToggle').addEventListener('click', layoutHandler);
 
   $('#loadMore').addEventListener('click', () => {
     state.page += 1;
     loadDiscover(false);
   });
 
-  // grid click → detail
   $('#grid').addEventListener('click', (e) => {
     const card = e.target.closest('.card');
     if (!card) return;
@@ -586,16 +709,15 @@ function wire() {
     if (item) openDetail(item);
   });
 
-  // modal
   $('#modalClose').addEventListener('click', closeModal);
   $('#modal').addEventListener('click', (e) => { if (e.target === $('#modal')) closeModal(); });
   $('#prevImg').addEventListener('click', () => {
-    if (!state.selectedImages?.length) return;
+    if (!state.selectedImages.length) return;
     state.imgIndex = (state.imgIndex - 1 + state.selectedImages.length) % state.selectedImages.length;
     updateGallery();
   });
   $('#nextImg').addEventListener('click', () => {
-    if (!state.selectedImages?.length) return;
+    if (!state.selectedImages.length) return;
     state.imgIndex = (state.imgIndex + 1) % state.selectedImages.length;
     updateGallery();
   });
@@ -607,7 +729,6 @@ function wire() {
     else window.open(item.url, '_blank', 'noopener');
   });
 
-  // folder actions (sidebar + settings)
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
@@ -616,27 +737,40 @@ function wire() {
     else if (btn.dataset.act === 'pick-exe') pickExe();
   });
 
-  // settings
   $('#saveSettings').addEventListener('click', async () => {
     await saveConfig({
       modsFolder: $('#setModsFolder').value.trim(),
       gameExe: $('#setGameExe').value.trim(),
       theme: $('#setTheme').value,
-      view: $('#setView').value,
+      view: state.layout,
       minDownloads: Number($('#setMinDownloads').value) || 0,
     });
     fillSettings();
     const note = $('#saveNote');
     note.textContent = 'Saved ✓';
+    note.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 260, easing: 'cubic-bezier(.22,1,.36,1)' });
     setTimeout(() => { note.textContent = ''; }, 2200);
   });
+  // Live preview the theme, persist only on Save.
   $('#setTheme').addEventListener('change', (e) => applyTheme(e.target.value));
 
-  // keyboard
+  $('#clearHistory').addEventListener('click', async () => {
+    if (!confirm('Clear all activity history?')) return;
+    try {
+      await apiPost('/api/history/clear');
+      toast('History cleared', 'ok');
+      loadHistory();
+    } catch (err) {
+      toast(`Couldn't clear history: ${err.message}`, 'err');
+    }
+  });
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
     if (e.key === '/' && document.activeElement !== $('#search')) {
-      e.preventDefault(); $('#search').focus();
+      e.preventDefault();
+      $('#search').focus();
     }
     if (!$('#modal').hidden) {
       if (e.key === 'ArrowLeft') $('#prevImg').click();
@@ -644,7 +778,6 @@ function wire() {
     }
   });
 
-  // infinite scroll
   $('#content').addEventListener('scroll', () => {
     const el = $('#content');
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 420) {
@@ -654,6 +787,8 @@ function wire() {
       }
     }
   });
+
+  window.addEventListener('resize', moveNavIndicator);
 }
 
 /* ---------------------------------------------------------------------- init */
@@ -665,12 +800,12 @@ async function init() {
     fillSettings();
     refreshFolderCard();
     $('#platformNote').textContent = state.meta.electron
-      ? `Electron ${String(state.meta.version || '')} · ${state.meta.platform}`
+      ? `Electron · ${state.meta.platform}`
       : `Browser preview · ${state.meta.platform}`;
     if (DESKTOP) {
       const info = await window.ff.info().catch(() => null);
       if (info) {
-        $('.ver').textContent = `v${info.version}`;
+        $('#verLabel').textContent = `v${info.version}`;
         $('#dataDirLabel').textContent = info.dataDir || '~/.funkforge';
       }
     } else {
@@ -682,19 +817,10 @@ async function init() {
     return;
   }
 
+  moveNavIndicator();
   await checkHealth();
   loadDiscover();
-  loadInstalledCount();
-}
-
-async function loadInstalledCount() {
-  try {
-    const d = await api('/api/local');
-    state.installed = d.mods || [];
-    state.installedNames = new Set(state.installed.map((m) => String(m.name).toLowerCase().trim()));
-    $('#installedCount').textContent = String(state.installed.length);
-    renderItems(false);
-  } catch (_) { /* ignore */ }
+  refreshCounts();
 }
 
 init();

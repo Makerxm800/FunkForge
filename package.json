@@ -1,6 +1,6 @@
 {
   "name": "funkforge",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "FunkForge (Beta) — a modern desktop app for browsing, installing and managing Friday Night Funkin' mods",
   "main": "electron/main.js",
   "author": "Makerxm800",

@@ -597,6 +597,11 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, readHistory());
     }
 
+    if (pathname === '/api/history/clear' && req.method === 'POST') {
+      writeHistory([]);
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (pathname === '/api/browse') {
       const data = await browse({
         page: Number(q.get('page') || 1),
