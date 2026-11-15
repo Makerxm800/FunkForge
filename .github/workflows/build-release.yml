@@ -1,7 +1,7 @@
 name: Build & Release
 
-# Real native builds on real Windows and macOS runners.
-# No Electron, no Node, no cross-compilation: each OS builds its own binary.
+# FunkForge (Beta) is a real Electron app. Each OS builds its own native
+# installer on a native runner — Windows .exe, macOS .app/.dmg, Linux AppImage.
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       make_release:
-        description: "Publish a GitHub Release with the built files"
+        description: "Publish a GitHub Release with the built installers"
         type: boolean
         default: false
 
@@ -22,137 +22,161 @@ defaults:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    # Linux (AppImage/deb) is a bonus target and is the most environment
+    # sensitive. Let it fail without blocking the Windows/macOS release,
+    # which is what most people actually download.
+    continue-on-error: ${{ matrix.optional || false }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            artifact: FunkForge-Beta-Windows-x64
+            label: Windows
+            kind: win
           - os: macos-latest
-            artifact: FunkForge-Beta-macOS
+            label: macOS
+            kind: mac
+          - os: ubuntu-latest
+            label: Linux
+            kind: linux
+            optional: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Set up Python (icon generation)
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Verify tkinter is available
-        run: python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Install build dependencies
+      - name: Generate platform icons
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-build.txt
-          # NB: don't pipe pip's output into `head` -- closing the pipe early
-          # makes Python exit 120 (BrokenPipeError) and fails the step.
-          python -c "import PyInstaller, requests, PIL; print('pyinstaller', PyInstaller.__version__)" 
+          python -m pip install pillow
+          python tools/make_icons.py
+          ls -la build/
 
-      - name: Build with PyInstaller
-        run: python -m PyInstaller FunkForge.spec --noconfirm --clean
-
-      - name: Verify the binary is a real native executable
-        run: python tools/verify_build.py
-
-      # ---------------- Windows ----------------
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        run: python tools/package_release.py "${{ matrix.artifact }}"
-
-      # ---------------- macOS ----------------
-      - name: Sign (macOS)
-        if: runner.os == 'macOS'
+      - name: Install Linux packaging prerequisites
+        if: runner.os == 'Linux'
         run: |
-          APP="dist/FunkForge (Beta).app"
-          if [ ! -d "$APP" ]; then
-            echo "::error::Expected app not found at: $APP"
-            ls -la dist
-            exit 1
-          fi
-          # Ad-hoc signature: lets macOS open the app instead of reporting it
-          # as damaged. Notarization would need a paid Apple Developer cert.
-          codesign --force --deep --sign - "$APP" || echo "codesign skipped"
-          codesign --verify --deep --strict "$APP" || echo "verify skipped"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            fakeroot dpkg libarchive-tools rpm || true
 
-      - name: Smoke test (macOS)
-        if: runner.os == 'macOS'
+      - name: Build ${{ matrix.label }} installer
+        run: npm run dist:${{ matrix.kind }}
+
+      - name: List build output
+        run: ls -la dist/
+
+      - name: Stage artifacts
         run: |
-          BIN="dist/FunkForge (Beta).app/Contents/MacOS/FunkForge (Beta)"
-          echo "Binary: $BIN"
-          ls -la "$BIN"
-          # --help prints usage and exits; proves the frozen Python works.
-          timeout 120 "$BIN" --help || echo "::warning::smoke test did not print help"
+          mkdir -p out
+          # Windows: NSIS setup + portable exe. macOS: dmg + zip. Linux: AppImage + deb.
+          for f in dist/*.exe dist/*.dmg dist/*.zip dist/*.AppImage dist/*.deb; do
+            [ -f "$f" ] && cp "$f" out/ || true
+          done
+          echo "--- staged ---"
+          ls -la out/
+          # A frozen Electron app is always well over 20 MB; anything smaller
+          # means the bundler produced something broken.
+          for f in out/*; do
+            size=$(wc -c < "$f")
+            if [ "$size" -lt 10485760 ]; then
+              echo "::error::$f is only $size bytes - build looks broken"
+              exit 1
+            fi
+          done
 
-      - name: Package (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          # .dmg is the standard way to hand out a macOS app.
-          hdiutil create \
-            -volname "FunkForge (Beta)" \
-            -srcfolder "dist/FunkForge (Beta).app" \
-            -ov -format UDZO \
-            "${{ matrix.artifact }}.dmg"
-          # Also ship a zip for people who'd rather not mount a DMG.
-          python tools/package_release.py "${{ matrix.artifact }}"
-          mkdir -p dist_pkg_dmg && mv "${{ matrix.artifact }}.dmg" dist_pkg_dmg/
-          ls -la dist_pkg_dmg/ dist_pkg/
-
-      - name: Upload build artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: |
-            dist_pkg/*.zip
-            dist_pkg_dmg/*.dmg
+          name: FunkForge-Beta-${{ matrix.label }}
+          path: out/*
           if-no-files-found: error
 
   release:
     name: Publish Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.make_release
+    # `always()` because the optional Linux job is allowed to fail; the step
+    # below still refuses to publish unless real installers were produced.
+    if: always() && (startsWith(github.ref, 'refs/tags/v') || inputs.make_release)
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Collect files
+      - name: Collect installers
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.zip' -o -name '*.dmg' \) -exec cp {} release/ \;
+          find artifacts -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' \
+               -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} release/ \;
           ls -la release/
+          count=$(find release -type f | wc -l)
+          echo "installers: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No installers were produced - refusing to publish."
+            exit 1
+          fi
+          if ! ls release/*.exe release/*.dmg >/dev/null 2>&1; then
+            echo "::warning::Neither a Windows .exe nor a macOS .dmg was produced."
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
           generate_release_notes: true
-          draft: false
           name: "FunkForge (Beta) ${{ github.ref_name }}"
           body: |
-            ## FunkForge (Beta) - native desktop builds
+            ## FunkForge (Beta) ${{ github.ref_name }}
 
-            Real native applications - **no Electron, no bundled browser**.
+            A modern **Electron** desktop app for browsing, installing and
+            managing *Friday Night Funkin'* mods.
 
-            | Platform | File | Notes |
+            ### 📦 Download
+
+            | Platform | File | What to do |
             |---|---|---|
-            | Windows 10/11 (64-bit) | `FunkForge-Beta-Windows-x64.zip` | Extract, then run **FunkForge (Beta).exe** |
-            | macOS (Apple Silicon + Intel) | `FunkForge-Beta-macOS.dmg` | Open the DMG, drag **FunkForge (Beta).app** to Applications (a `.zip` of the same app is also attached) |
+            | **Windows 10/11** | `FunkForge-Beta-*-win.exe` | Run the installer |
+            | **Windows (portable)** | `FunkForge-Beta-*-portable.exe` | No install — just double-click |
+            | **macOS (Intel)** | `FunkForge-Beta-*-x64-mac.dmg` | Open the DMG, drag the app to Applications |
+            | **macOS (Apple Silicon)** | `FunkForge-Beta-*-arm64-mac.dmg` | Same as above |
+            | **Linux** | `FunkForge-Beta-*.AppImage` | `chmod +x` then run it |
+            | **Linux (Debian/Ubuntu)** | `FunkForge-Beta-*.deb` | `sudo apt install ./file.deb` |
 
-            ### First launch notes
-            - **Windows:** SmartScreen may say "Windows protected your PC".
-              Click **More info -> Run anyway** (the app is unsigned; signing
-              certificates cost money).
-            - **macOS:** right-click the app -> **Open** the first time, or
-              allow it under *System Settings -> Privacy & Security*.
+            ### ⚠️ First-launch warnings (expected)
+            These builds are **unsigned** — code-signing certificates cost
+            hundreds of dollars a year, which this free hobby project doesn't
+            have. Nothing is wrong with the files.
 
-            ### What's inside
-            - Browse, search and download Friday Night Funkin' mods from GameBanana
-            - Installed-mods manager, profiles, themes, game launcher
-            - Built-in web UI (`--web`) available next to the desktop app
+            - **Windows SmartScreen:** *"Windows protected your PC"* → **More info → Run anyway**
+            - **macOS Gatekeeper:** right-click the app → **Open** once, or allow it under
+              *System Settings → Privacy & Security*
+            - **Linux:** `chmod +x FunkForge-Beta-*.AppImage`
+
+            ### ✨ What's in this release
+            - Rewritten from scratch as an **Electron** app — modern UI, 7 themes
+            - Discover / Installed / History / Settings
+            - Real native folder pickers, OS notifications, custom titlebar
+            - Downloads run through a local backend with a disk cache
+            - Mods folder is always visible in the sidebar, with Open + Change
+
+            ### 🔒 Privacy
+            Talks to **gamebanana.com** and nowhere else. No telemetry,
+            no analytics, no accounts, no ads.

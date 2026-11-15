@@ -1,80 +1,81 @@
 #!/usr/bin/env python3
-"""Build the platform icon files from assets/logo.png.
+"""Generate the platform icon files electron-builder needs.
 
-Produces:
-  assets/logo.ico   - multi-resolution Windows icon (16..256)
-  assets/logo.icns  - macOS icon bundle
-  assets/logo_1024.png - normalized 1024x1024 master
+    assets/logo.png  ->  build/icon.ico   (Windows: 16..256, multi-resolution)
+                        build/icon.icns  (macOS icon bundle)
+                        build/icon.png   (Linux: 512x512)
 
-Run:  python tools/make_icons.py
-Cross-platform (no macOS or Windows needed) thanks to Pillow.
+Uses Apple's `iconutil` on macOS when available (the most compatible .icns),
+otherwise falls back to Pillow, which works on every platform.
 """
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "logo.png"
-OUT = ROOT / "assets"
+OUT = ROOT / "build"
 
-# Windows .ico: classic shell sizes (Pillow embeds each one).
-ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64),
-             (128, 128), (256, 256)]
-
-# macOS .icns: Pillow writes these; 512x512@2x == 1024x1024.
-ICNS_SIZES = [(16, 16), (32, 32), (64, 64), (128, 128), (256, 256),
-              (512, 512), (1024, 1024)]
+ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+ICONSET = [
+    (16, "icon_16x16.png"), (32, "icon_16x16@2x.png"),
+    (32, "icon_32x32.png"), (64, "icon_32x32@2x.png"),
+    (128, "icon_128x128.png"), (256, "icon_128x128@2x.png"),
+    (256, "icon_256x256.png"), (512, "icon_256x256@2x.png"),
+    (512, "icon_512x512.png"), (1024, "icon_512x512@2x.png"),
+]
 
 
 def load_master() -> Image.Image:
     if not SRC.is_file():
-        sys.exit(f"[make_icons] Missing source logo: {SRC}")
+        sys.exit(f"[icons] missing source logo: {SRC}")
     im = Image.open(SRC)
     im.load()
-    # .ico/.icns want an alpha channel so the tile can have rounded corners.
     return im.convert("RGBA")
 
 
-def make_png_master(im: Image.Image) -> Path:
-    p = OUT / "logo_1024.png"
-    im.resize((1024, 1024), Image.LANCZOS).save(p, "PNG", optimize=True)
-    print(f"[make_icons] wrote {p.relative_to(ROOT)}")
-    return p
+def make_ico(im: Image.Image) -> None:
+    p = OUT / "icon.ico"
+    im.save(p, "ICO", sizes=ICO_SIZES, bitmap_format="bmp")
+    print(f"[icons] build/icon.ico  ({len(ICO_SIZES)} sizes, {p.stat().st_size // 1024} KB)")
 
 
-def make_ico(im: Image.Image) -> Path:
-    p = OUT / "logo.ico"
-    im.save(
-        p,
-        "ICO",
-        sizes=ICO_SIZES,
-        # Bitmap-format entries keep older Windows shells happy.
-        bitmap_format="bmp",
-    )
-    print(f"[make_icons] wrote {p.relative_to(ROOT)} ({len(ICO_SIZES)} sizes)")
-    return p
+def make_png(im: Image.Image) -> None:
+    p = OUT / "icon.png"
+    im.resize((512, 512), Image.LANCZOS).save(p, "PNG", optimize=True)
+    print(f"[icons] build/icon.png  (512x512, {p.stat().st_size // 1024} KB)")
 
 
-def make_icns(im: Image.Image) -> Path:
-    p = OUT / "logo.icns"
-    im.save(p, "ICNS", sizes=ICNS_SIZES)
-    print(f"[make_icons] wrote {p.relative_to(ROOT)} ({len(ICNS_SIZES)} sizes)")
-    return p
+def make_icns(im: Image.Image) -> None:
+    p = OUT / "icon.icns"
+    if sys.platform == "darwin" and shutil.which("iconutil"):
+        tmp = Path(tempfile.mkdtemp())
+        iconset = tmp / "icon.iconset"
+        iconset.mkdir()
+        for size, name in ICONSET:
+            im.resize((size, size), Image.LANCZOS).save(iconset / name, "PNG")
+        subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(p)],
+                       check=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        print(f"[icons] build/icon.icns (iconutil, {p.stat().st_size // 1024} KB)")
+    else:
+        im.save(p, "ICNS",
+                sizes=[(s, s) for s in (16, 32, 64, 128, 256, 512, 1024)])
+        print(f"[icons] build/icon.icns (Pillow, {p.stat().st_size // 1024} KB)")
 
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     master = load_master()
-    make_png_master(master)
     make_ico(master)
-    try:
-        make_icns(master)
-    except Exception as exc:  # non-fatal: Windows/Linux builds don't need it
-        print(f"[make_icons] note: could not write .icns ({exc}). "
-              f"macOS builds will fall back to the .ico.")
+    make_png(master)
+    make_icns(master)
     return 0
 
 
